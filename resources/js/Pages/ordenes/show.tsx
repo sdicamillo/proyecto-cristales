@@ -31,6 +31,7 @@ type Detalle = {
     cantidad: number;
     colocacion_incluida: boolean;
     articulo: { id: number; nombre: string } | null;
+    marca_articulo?: { id: number; nombre: string } | null;
     atributos: Atributo[];
 };
 
@@ -203,8 +204,13 @@ export default function Show({
                                             {orden.detalles.map((detalle, index) => (
                                                 <tr key={index} className="text-sm text-gray-700">
                                                     <td className="py-3 pl-2">
-                                                        <div className="font-medium text-gray-900">
-                                                            {detalle.articulo?.nombre || 'Artículo no especificado'}
+                                                        <div className="flex items-center gap-2 font-medium text-gray-900">
+                                                            <span>{detalle.articulo?.nombre || 'Artículo no especificado'}</span>
+                                                            {detalle.marca_articulo?.nombre && (
+                                                                <span className="rounded-md bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">
+                                                                    {detalle.marca_articulo.nombre}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         {detalle.atributos?.length > 0 && (
                                                             <div className="mt-1 flex flex-wrap gap-1">

@@ -10,6 +10,7 @@ use App\Http\Controllers\DailySummaryController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EgresoController;
 use App\Http\Controllers\IngresoController;
+use App\Http\Controllers\MarcaArticuloController;
 use App\Http\Controllers\MedioDePagoController;
 use App\Http\Controllers\MetricsController;
 use App\Http\Controllers\OrdenDeTrabajoController;
@@ -111,6 +112,8 @@ Route::middleware(['auth'])->group(function () {
     });
 
     Route::get('api/marcas', [CatalogoVehiculoController::class, 'getMarcas'])->name('api.marcas');
+    Route::get('api/marcas-articulos', [MarcaArticuloController::class, 'index'])->name('api.marcas-articulos.index');
+    Route::post('api/marcas-articulos', [MarcaArticuloController::class, 'store'])->name('api.marcas-articulos.store');
     Route::get('api/modelos/{marcaId}', [CatalogoVehiculoController::class, 'getModelosByMarca'])->name('api.modelos');
 
     Route::middleware('capability:' . RoleCapabilities::VIEW_FINANCIAL_REPORTS)->group(function () {
