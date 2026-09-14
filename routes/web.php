@@ -85,6 +85,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/companias-seguros', [CompaniaDeSeguroController::class, 'store']);
         Route::put('/companias-seguros/{compania}', [CompaniaDeSeguroController::class, 'update']);
         Route::delete('/companias-seguros/{compania}', [CompaniaDeSeguroController::class, 'destroy']);
+
+        Route::resource('marcas-articulos', MarcaArticuloController::class)
+            ->except(['create', 'show', 'edit']);
     });
 
     Route::middleware('capability:' . RoleCapabilities::VIEW_FINANCIAL_MOVEMENTS)->group(function () {
