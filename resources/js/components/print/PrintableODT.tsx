@@ -12,6 +12,7 @@ interface Detalle {
     cantidad: number;
     colocacion_incluida: boolean;
     articulo: { id: number; nombre: string } | null;
+    marca_articulo?: { id: number; nombre: string } | null;
     atributos: Atributo[];
 }
 
@@ -148,7 +149,10 @@ export default function PrintableODT({ orden }: Props) {
                     {orden.detalles.map((detalle, index) => (
                         <tr key={index}>
                             <td style={{ border: '1px solid #d1d5db', padding: '5px 8px' }}>
-                                <span style={{ fontWeight: 600, fontSize: '10pt' }}>{detalle.articulo?.nombre || "Artículo"}</span>
+                                <span style={{ fontWeight: 600, fontSize: '10pt' }}>
+                                    {detalle.articulo?.nombre || "Artículo"}
+                                    {detalle.marca_articulo?.nombre ? ` (${detalle.marca_articulo.nombre})` : ""}
+                                </span>
                                 {detalle.atributos && detalle.atributos.length > 0 && (
                                     <span style={{ color: '#6b7280', fontSize: '8pt', marginLeft: '6px' }}>
                                         ({detalle.atributos.map(a => a.subcategoria?.nombre).join(", ")})

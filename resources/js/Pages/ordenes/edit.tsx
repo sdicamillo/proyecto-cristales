@@ -19,6 +19,7 @@ type CatalogItem = { id: number; nombre: string };
 
 type OrdenDetalleServer = {
   articulo_id: number;
+  marca_articulo_id?: number | null;
   descripcion: string | null;
   valor: number | string;
   cantidad: number | string;
@@ -85,6 +86,7 @@ export default function Edit({
   articulos = [],
   companiasSeguros = [],
   titulares = [],
+  marcasArticulos = [],
 }: {
   orden: Orden;
   estados: Estado[];
@@ -92,6 +94,7 @@ export default function Edit({
   articulos: ArticuloDTO[];
   companiasSeguros: CatalogItem[];
   titulares?: any[];
+  marcasArticulos?: any[];
 }) {
   const params = new URLSearchParams(window.location.search);
   const returnUrl = params.get("return") || `/ordenes/${orden.id}`;
@@ -132,6 +135,7 @@ export default function Edit({
 
       return {
         articulo_id: d.articulo_id,
+        marca_articulo_id: (d as any).marca_articulo_id ?? null,
         descripcion: d.descripcion ?? "",
         valor: d.valor ?? 0,
         cantidad: d.cantidad ?? 1,
@@ -374,6 +378,7 @@ export default function Edit({
           <DetallesSection
             detalles={data.detalles}
             articulos={articulos}
+            marcasArticulos={marcasArticulos}
             errors={allErrors}
             setDetalles={(nuevos: DetalleUI[]) => {
               setData((prev: FormData) => ({

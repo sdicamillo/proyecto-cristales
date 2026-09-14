@@ -1,7 +1,9 @@
-import React, { useMemo } from "react";
-import { Plus, Trash2, DollarSign, Layers, Tag, Wrench, Store } from "lucide-react";
-import DeleteButton from "../botones/boton-eliminar";
+import React, { useMemo, useState, useEffect } from "react";
+import { Plus, Trash2, DollarSign, Layers, Tag, Wrench, Store, Bookmark, Check, X } from "lucide-react";
+import Select from "react-select";
 import { ordenarPorEtiqueta } from "@/lib/utils";
+import axios from "axios";
+import { toast } from "react-hot-toast";
 
 export interface SubcategoriaDTO {
   id: number;
@@ -21,16 +23,18 @@ export interface ArticuloDTO {
   categorias: CategoriaDTO[];
 }
 
+export interface MarcaArticuloDTO {
+  id: number;
+  nombre: string;
+}
+
 export interface Detalle {
   articulo_id: number | null;
-  // opcional: aclaración libre (no reemplaza el artículo)
+  marca_articulo_id?: number | null;
   descripcion: string;
-
   valor: number | string;
   cantidad: number;
   colocacion_incluida: boolean; // true = Colocación, false = Retiro en local
-
-  // categoriaId -> subcategoriaId
   atributos: Record<number, number | null>;
 }
 
@@ -38,15 +42,95 @@ interface Props {
   detalles: Detalle[];
   setDetalles: (detalles: Detalle[]) => void;
   articulos: ArticuloDTO[];
+  marcasArticulos?: MarcaArticuloDTO[];
   errors?: Record<string, string>;
 }
 
-export default function DetallesSection({ detalles, setDetalles, articulos, errors }: Props) {
+const selectStyles = {
+  control: (base: any, state: any) => ({
+    ...base,
+    minHeight: 38,
+    height: 38,
+    borderRadius: "0.5rem",
+    borderWidth: 1,
+    borderColor: state.isFocused ? "#22c55e" : "#d1d5db",
+    boxShadow: state.isFocused ? "0 0 0 2px rgba(34,197,94,0.25)" : "none",
+    "&:hover": { borderColor: state.isFocused ? "#22c55e" : "#9ca3af" },
+    backgroundColor: "#ffffff",
+    fontSize: "0.875rem",
+  }),
+  valueContainer: (b: any) => ({ ...b, padding: "0 8px" }),
+  input: (b: any) => ({
+    ...b,
+    margin: 0,
+    padding: 0,
+    color: "#111827",
+  }),
+  singleValue: (b: any) => ({
+    ...b,
+    color: "#111827",
+    fontSize: "0.875rem",
+  }),
+  placeholder: (b: any) => ({
+    ...b,
+    color: "#9ca3af",
+    fontSize: "0.875rem",
+  }),
+  dropdownIndicator: (b: any) => ({
+    ...b,
+    padding: "4px 6px",
+    color: "#6b7280",
+  }),
+  clearIndicator: (b: any) => ({
+    ...b,
+    padding: "4px",
+    color: "#9ca3af",
+  }),
+  indicatorsContainer: (b: any) => ({ ...b, height: 38 }),
+  menu: (b: any) => ({
+    ...b,
+    borderRadius: "0.5rem",
+    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+    zIndex: 30,
+  }),
+  option: (b: any, state: any) => ({
+    ...b,
+    fontSize: "0.875rem",
+    color: state.isSelected ? "#ffffff" : "#111827",
+    backgroundColor: state.isSelected
+      ? "#22c55e"
+      : state.isFocused
+        ? "#f3f4f6"
+        : "#ffffff",
+    cursor: "pointer",
+  }),
+} as const;
+
+export default function DetallesSection({ detalles, setDetalles, articulos, marcasArticulos = [], errors }: Props) {
+  const [listaMarcas, setListaMarcas] = useState<MarcaArticuloDTO[]>(marcasArticulos);
+  const [itemIndexForNewMarca, setItemIndexForNewMarca] = useState<number | null>(null);
+  const [nuevaMarcaNombre, setNuevaMarcaNombre] = useState<string>("");
+  const [isSavingMarca, setIsSavingMarca] = useState<boolean>(false);
+
+  useEffect(() => {
+    setListaMarcas(marcasArticulos);
+  }, [marcasArticulos]);
+
   const articulosById = useMemo(() => {
     const map = new Map<number, ArticuloDTO>();
     articulos.forEach((a) => map.set(a.id, a));
     return map;
   }, [articulos]);
+
+  const marcaOptions = useMemo(() => {
+    return ordenarPorEtiqueta(
+      listaMarcas.map((m) => ({
+        value: m.id,
+        label: m.nombre,
+      })),
+      (o) => o.label
+    );
+  }, [listaMarcas]);
 
   const handleChange = (index: number, field: keyof Detalle, value: any) => {
     const nuevos = [...detalles];
@@ -71,9 +155,6 @@ export default function DetallesSection({ detalles, setDetalles, articulos, erro
     const articuloId = articuloIdRaw ? Number(articuloIdRaw) : null;
     const articulo = articuloId ? articulosById.get(articuloId) : undefined;
 
-    // Al cambiar artículo:
-    // - setea articulo_id
-    // - resetea atributos para que coincidan con categorías del nuevo artículo
     const nuevos = [...detalles];
     const prev = nuevos[index];
 
@@ -97,6 +178,7 @@ export default function DetallesSection({ detalles, setDetalles, articulos, erro
     setDetalles([
       {
         articulo_id: null,
+        marca_articulo_id: null,
         descripcion: "",
         valor: "",
         cantidad: 1,
@@ -117,13 +199,48 @@ export default function DetallesSection({ detalles, setDetalles, articulos, erro
     setDetalles(detalles.filter((_, i) => i !== index));
   };
 
+  const handleCreateMarca = async () => {
+    const nombreTrimmed = nuevaMarcaNombre.trim();
+    if (!nombreTrimmed) {
+      toast.error("Ingresá el nombre de la marca.");
+      return;
+    }
+
+    setIsSavingMarca(true);
+    try {
+      const response = await axios.post<MarcaArticuloDTO>("/api/marcas-articulos", {
+        nombre: nombreTrimmed,
+      });
+      const nuevaMarca = response.data;
+
+      // Actualizar lista local de marcas si no existía ya
+      setListaMarcas((prev) => {
+        if (prev.some((m) => m.id === nuevaMarca.id)) return prev;
+        return [...prev, nuevaMarca];
+      });
+
+      // Asignar automáticamente la nueva marca al artículo actual
+      if (itemIndexForNewMarca !== null) {
+        handleChange(itemIndexForNewMarca, "marca_articulo_id", nuevaMarca.id);
+      }
+
+      toast.success(`Marca "${nuevaMarca.nombre}" agregada y seleccionada.`);
+      setNuevaMarcaNombre("");
+      setItemIndexForNewMarca(null);
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || "Error al crear la marca.";
+      toast.error(errorMsg);
+    } finally {
+      setIsSavingMarca(false);
+    }
+  };
+
   const total = detalles.reduce((sum, d) => {
     const v = d.valor === "" ? 0 : Number(d.valor);
     return sum + (isNaN(v) ? 0 : v) * (Number(d.cantidad) || 0);
   }, 0);
 
   const getItemError = (idx: number, field: string) => {
-    // convención sugerida desde backend: detalles.0.articulo_id, detalles.0.valor, etc.
     if (!errors) return "";
     return errors[`detalles.${idx}.${field}`] || "";
   };
@@ -149,6 +266,72 @@ export default function DetallesSection({ detalles, setDetalles, articulos, erro
         </button>
       </div>
 
+      {/* Modal / Popup Inline para Nueva Marca */}
+      {itemIndexForNewMarca !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <Bookmark className="h-5 w-5 text-green-600" />
+                <h3 className="text-lg font-bold text-gray-900">Nueva Marca de Artículo</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setItemIndexForNewMarca(null);
+                  setNuevaMarcaNombre("");
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-800 mb-1">
+                Nombre de la Marca *
+              </label>
+              <input
+                type="text"
+                value={nuevaMarcaNombre}
+                onChange={(e) => setNuevaMarcaNombre(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleCreateMarca();
+                  }
+                }}
+                placeholder="Ej: Pilkington, Sekurit, Fuyao..."
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-gray-900 font-medium"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setItemIndexForNewMarca(null);
+                  setNuevaMarcaNombre("");
+                }}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateMarca}
+                disabled={isSavingMarca}
+                className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-xl transition shadow disabled:opacity-50"
+              >
+                <Check className="h-4 w-4" />
+                {isSavingMarca ? "Guardando..." : "Guardar Marca"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Lista de ítems */}
       <div className="space-y-6">
         {detalles.map((detalle, index) => {
@@ -171,7 +354,7 @@ export default function DetallesSection({ detalles, setDetalles, articulos, erro
               {/* Fila principal compacta */}
               <div className="flex flex-wrap items-end gap-3">
                 {/* Artículo */}
-                <div className="flex-1 min-w-[200px]">
+                <div className="flex-1 min-w-[180px]">
                   <label className="block text-xs font-semibold text-gray-600 mb-1">
                     Artículo *
                   </label>
@@ -190,6 +373,40 @@ export default function DetallesSection({ detalles, setDetalles, articulos, erro
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+
+                {/* Marca (Buscable con react-select + botón +) */}
+                <div className="flex-1 min-w-[180px]">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Marca
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <div className="flex-1 min-w-0">
+                      <Select
+                        options={marcaOptions}
+                        placeholder="Buscar o seleccionar marca..."
+                        isClearable
+                        isSearchable
+                        value={marcaOptions.find((opt) => opt.value === detalle.marca_articulo_id) || null}
+                        onChange={(opt: any) =>
+                          handleChange(index, "marca_articulo_id", opt ? opt.value : null)
+                        }
+                        styles={selectStyles}
+                        components={{ IndicatorSeparator: null }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setItemIndexForNewMarca(index);
+                        setNuevaMarcaNombre("");
+                      }}
+                      className="h-[38px] w-[38px] flex items-center justify-center rounded-lg bg-green-600 text-white hover:bg-green-700 transition shadow shrink-0"
+                      title="Agregar nueva marca de artículo"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
 

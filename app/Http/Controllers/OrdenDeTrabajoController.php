@@ -8,6 +8,7 @@ use App\Models\Concepto;
 use App\Models\DetalleOrdenAtributo;
 use App\Models\DetalleOrdenDeTrabajo;
 use App\Models\Estado;
+use App\Models\MarcaArticulo;
 use App\Models\MedioDePago;
 use App\Models\Movimiento;
 use App\Models\OrdenDeTrabajo;
@@ -144,12 +145,15 @@ class OrdenDeTrabajoController extends Controller
             ->orderBy('nombre')
             ->get(['id', 'nombre']);
 
+        $marcasArticulos = MarcaArticulo::select('id', 'nombre')->orderBy('nombre')->get();
+
         return Inertia::render('ordenes/createOrdenes', [
             'titulares' => $titulares,
             'estados' => $estados,
             'mediosDePago' => $mediosDePago,
             'articulos' => $articulos,
             'companiasSeguros' => $companiasSeguros,
+            'marcasArticulos' => $marcasArticulos,
             'tipo_documento' => 'OT',
             'con_factura' => false,
         ]);
@@ -175,6 +179,7 @@ class OrdenDeTrabajoController extends Controller
             'numero_orden' => 'nullable|string|max:32',
             'detalles' => 'required|array|min:1',
             'detalles.*.articulo_id' => 'required|integer|exists:articulos,id',
+            'detalles.*.marca_articulo_id' => 'nullable|integer|exists:marcas_articulos,id',
             'detalles.*.descripcion' => 'nullable|string|max:255',
             'detalles.*.valor' => 'required|numeric|min:0',
             'detalles.*.cantidad' => 'required|integer|min:1',
@@ -312,16 +317,7 @@ class OrdenDeTrabajoController extends Controller
             ]);
 
             $prefix = $conFactura ? 'FC-' : 'OT-';
-            $lastOrder = OrdenDeTrabajo::where('numero_orden', 'like', $prefix . '%')
-                ->lockForUpdate()
-                ->orderByRaw('CAST(SUBSTRING(numero_orden, 4) AS UNSIGNED) DESC')
-                ->first();
-
-            $newNumber = 1;
-            if ($lastOrder && preg_match('/^' . $prefix . '(\d+)$/', $lastOrder->numero_orden, $matches)) {
-                $newNumber = (int) $matches[1] + 1;
-            }
-            $numeroCorrelativo = $prefix . str_pad($newNumber, 6, '0', STR_PAD_LEFT);
+            $numeroCorrelativo = $this->generarNumeroOrden($prefix);
 
             $orden = OrdenDeTrabajo::create([
                 'titular_vehiculo_id' => $pivot->id,
@@ -361,6 +357,7 @@ class OrdenDeTrabajoController extends Controller
                 $detalleCreado = DetalleOrdenDeTrabajo::create([
                     'orden_de_trabajo_id' => $orden->id,
                     'articulo_id' => $detalle['articulo_id'],
+                    'marca_articulo_id' => $detalle['marca_articulo_id'] ?? null,
                     'descripcion' => $detalle['descripcion'] ?? null,
                     'valor' => $detalle['valor'] ?? 0,
                     'cantidad' => $detalle['cantidad'] ?? 1,
@@ -513,6 +510,7 @@ class OrdenDeTrabajoController extends Controller
             ],
             'detalles' => 'required|array|min:1',
             'detalles.*.articulo_id' => 'required|integer|exists:articulos,id',
+            'detalles.*.marca_articulo_id' => 'nullable|integer|exists:marcas_articulos,id',
             'detalles.*.descripcion' => 'nullable|string|max:255',
             'detalles.*.valor' => 'required|numeric|min:0',
             'detalles.*.cantidad' => 'required|integer|min:1',
@@ -603,15 +601,7 @@ class OrdenDeTrabajoController extends Controller
             $numeroCorrelativo = $orden->numero_orden;
 
             if (!$numeroCorrelativo || !str_starts_with($numeroCorrelativo, $prefixFinal)) {
-                $lastOrder = OrdenDeTrabajo::where('numero_orden', 'like', $prefixFinal . '%')
-                    ->lockForUpdate()
-                    ->orderByRaw('CAST(SUBSTRING(numero_orden, 4) AS UNSIGNED) DESC')
-                    ->first();
-                $newNumber = 1;
-                if ($lastOrder && preg_match('/^' . $prefixFinal . '(\d+)$/', $lastOrder->numero_orden, $matches)) {
-                    $newNumber = (int) $matches[1] + 1;
-                }
-                $numeroCorrelativo = $prefixFinal . str_pad($newNumber, 6, '0', STR_PAD_LEFT);
+                $numeroCorrelativo = $this->generarNumeroOrden($prefixFinal);
             }
 
             $orden->update([
@@ -671,6 +661,7 @@ class OrdenDeTrabajoController extends Controller
                 $detalleCreado = DetalleOrdenDeTrabajo::create([
                     'orden_de_trabajo_id' => $orden->id,
                     'articulo_id' => $d['articulo_id'],
+                    'marca_articulo_id' => $d['marca_articulo_id'] ?? null,
                     'descripcion' => $d['descripcion'] ?? null,
                     'valor' => $d['valor'],
                     'cantidad' => $d['cantidad'],
@@ -810,6 +801,7 @@ class OrdenDeTrabajoController extends Controller
             'titularVehiculo.vehiculo.modelo',
             'estado',
             'detalles.articulo',
+            'detalles.marcaArticulo',
             'detalles.atributos.categoria',
             'detalles.atributos.subcategoria',
             'pagos.medioDePago',
@@ -867,6 +859,7 @@ class OrdenDeTrabajoController extends Controller
             'titularVehiculo.titular',
             'titularVehiculo.vehiculo.marca',
             'titularVehiculo.vehiculo.modelo',
+            'detalles.marcaArticulo',
             'detalles.atributos',
             'pagos.medioDePago',
             'companiaSeguro',
@@ -892,6 +885,7 @@ class OrdenDeTrabajoController extends Controller
 
         $estados = Estado::select('id', 'nombre')->orderBy('nombre')->get();
         $mediosDePago = MedioDePago::select('id', 'nombre')->orderBy('nombre')->get();
+        $marcasArticulos = MarcaArticulo::select('id', 'nombre')->orderBy('nombre')->get();
 
         return Inertia::render('ordenes/edit', [
             'orden' => $orden,
@@ -900,6 +894,7 @@ class OrdenDeTrabajoController extends Controller
             'companiasSeguros' => $companiasSeguros,
             'estados' => $estados,
             'mediosDePago' => $mediosDePago,
+            'marcasArticulos' => $marcasArticulos,
         ]);
     }
     public function destroy(OrdenDeTrabajo $orden)
@@ -960,6 +955,32 @@ class OrdenDeTrabajoController extends Controller
         $user ??= auth()->user();
 
         return (int) ($user?->role_id ?? 0) === 3;
+    }
+
+    /**
+     * Genera un número correlativo único para las órdenes de trabajo.
+     */
+    private function generarNumeroOrden(string $prefix): string
+    {
+        $lastOrder = OrdenDeTrabajo::whereRaw("numero_orden REGEXP '^" . $prefix . "[0-9]+$'")
+            ->lockForUpdate()
+            ->orderByRaw("CAST(SUBSTRING(numero_orden, " . (strlen($prefix) + 1) . ") AS UNSIGNED) DESC")
+            ->first();
+
+        $newNumber = 1;
+        if ($lastOrder && preg_match('/^' . preg_quote($prefix, '/') . '(\d+)$/', $lastOrder->numero_orden, $matches)) {
+            $newNumber = (int) $matches[1] + 1;
+        }
+
+        $numeroCorrelativo = $prefix . str_pad($newNumber, 6, '0', STR_PAD_LEFT);
+
+        // Garantía anti-colisión: Incrementar si ya existe en la BD
+        while (OrdenDeTrabajo::where('numero_orden', $numeroCorrelativo)->exists()) {
+            $newNumber++;
+            $numeroCorrelativo = $prefix . str_pad($newNumber, 6, '0', STR_PAD_LEFT);
+        }
+
+        return $numeroCorrelativo;
     }
 }
 

@@ -46,11 +46,13 @@ type Props = {
     mediosDePago: any[];
     articulos?: any[];
     companiasSeguros?: CatalogItem[];
+    marcasArticulos?: any[];
 };
 
-export default function CreateOrdenes({ titulares, estados, mediosDePago, articulos = [], companiasSeguros = [] }: Props) {
+export default function CreateOrdenes({ titulares, estados, mediosDePago, articulos = [], companiasSeguros = [], marcasArticulos = [] }: Props) {
     const detalleInicial: Detalle = {
         articulo_id: null,
+        marca_articulo_id: null,
         descripcion: '',
         valor: '',
         cantidad: 1,
@@ -359,6 +361,7 @@ export default function CreateOrdenes({ titulares, estados, mediosDePago, articu
                         <DetallesSection
                             detalles={data.detalles}
                             articulos={articulos}
+                            marcasArticulos={marcasArticulos}
                             errors={allErrors}
                             setDetalles={(nuevos: Detalle[]) => {
                                 setData((prev: FormData) => ({

@@ -14,6 +14,7 @@ class DetalleOrdenDeTrabajo extends Model
     protected $fillable = [
         'orden_de_trabajo_id',
         'articulo_id',
+        'marca_articulo_id',
         'descripcion',
         'valor',
         'cantidad',
@@ -32,6 +33,11 @@ class DetalleOrdenDeTrabajo extends Model
     public function articulo()
     {
         return $this->belongsTo(Articulo::class, 'articulo_id');
+    }
+
+    public function marcaArticulo()
+    {
+        return $this->belongsTo(MarcaArticulo::class, 'marca_articulo_id');
     }
 
     public function atributos()
