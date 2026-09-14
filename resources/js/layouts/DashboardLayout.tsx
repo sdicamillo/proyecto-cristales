@@ -90,6 +90,12 @@ export default function DashboardLayout({ children, title }: Props) {
             },
             { href: '/articulos', label: 'Artículos', active: (currentUrl) => currentUrl.startsWith('/articulos'), visible: canManageCatalogs },
             {
+                href: '/marcas-articulos',
+                label: 'Marcas de Artículos',
+                active: (currentUrl) => currentUrl.startsWith('/marcas-articulos'),
+                visible: canManageCatalogs,
+            },
+            {
                 href: '/medio-de-pago',
                 label: 'Medios de pago',
                 active: (currentUrl) => currentUrl.startsWith('/medio-de-pago'),
