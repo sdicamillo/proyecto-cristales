@@ -13,6 +13,8 @@ import DateTimePicker from '@/components/ui/DateTimePicker';
 import { getArgentinaNow } from '@/utils/dateFormat';
 import { ordenarPorEtiqueta } from '@/lib/utils';
 
+import ResponsablesSection, { type Responsable } from '@/components/ui/ResponsablesSection';
+
 type TipoDocumento = 'OT' | 'FC';
 
 type CatalogItem = { id: number; nombre: string };
@@ -28,6 +30,8 @@ type FormData = {
     vehiculo_id: number | null;
     nuevo_vehiculo: any | null;
     estado_id: number | null;
+    asignado_a_id: number | null;
+    completado_por_id: number | null;
     pagos: Array<{
         medio_de_pago_id: number | string;
         monto: number | string;
@@ -41,6 +45,7 @@ type FormData = {
 };
 
 type Props = {
+    usuarios: Responsable[];
     titulares: any[];
     estados: any[];
     mediosDePago: any[];
@@ -49,7 +54,7 @@ type Props = {
     marcasArticulos?: any[];
 };
 
-export default function CreateOrdenes({ titulares, estados, mediosDePago, articulos = [], companiasSeguros = [], marcasArticulos = [] }: Props) {
+export default function CreateOrdenes({ usuarios, titulares, estados, mediosDePago, articulos = [], companiasSeguros = [], marcasArticulos = [] }: Props) {
     const detalleInicial: Detalle = {
         articulo_id: null,
         marca_articulo_id: null,
@@ -71,6 +76,8 @@ export default function CreateOrdenes({ titulares, estados, mediosDePago, articu
         vehiculo_id: null,
         nuevo_vehiculo: null,
         estado_id: null,
+        asignado_a_id: null,
+        completado_por_id: null,
         pagos: [],
         observacion: '',
         fecha: '',
@@ -381,7 +388,8 @@ export default function CreateOrdenes({ titulares, estados, mediosDePago, articu
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                        <div className="space-y-6">
+                            <ResponsablesSection usuarios={usuarios} estados={estados} formData={data} setFormData={mergeForm} errors={allErrors} />
                             <EstadoSection
                                 estados={estados}
                                 formData={data}

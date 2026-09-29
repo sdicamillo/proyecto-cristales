@@ -13,6 +13,8 @@ import { getArgentinaToday, getArgentinaNow } from '@/utils/dateFormat';
 import DateTimePicker from '@/components/ui/DateTimePicker';
 import { ordenarPorEtiqueta } from '@/lib/utils';
 
+import ResponsablesSection, { type Responsable } from '@/components/ui/ResponsablesSection';
+
 type Estado = { id: number; nombre: string };
 type MedioDePago = { id: number; nombre: string };
 type CatalogItem = { id: number; nombre: string };
@@ -39,6 +41,8 @@ type OrdenPagoServer = {
 };
 
 type Orden = {
+  asignado_a_id: number | null;
+  completado_por_id: number | null;
   id: number;
   estado_id: number;
   fecha: string;
@@ -55,6 +59,8 @@ type Orden = {
 };
 
 type FormData = {
+  asignado_a_id: number | null;
+  completado_por_id: number | null;
   estado_id: number | null;
   fecha: string;
   fecha_entrega_estimada: string;
@@ -80,6 +86,7 @@ type FormData = {
 };
 
 export default function Edit({
+  usuarios,
   orden,
   estados,
   mediosDePago,
@@ -88,6 +95,7 @@ export default function Edit({
   titulares = [],
   marcasArticulos = [],
 }: {
+  usuarios: Responsable[];
   orden: Orden;
   estados: Estado[];
   mediosDePago: MedioDePago[];
@@ -103,6 +111,8 @@ export default function Edit({
   const vehiculoRef = useRef<VehiculoSectionRef>(null);
 
   const initial: FormData = {
+    asignado_a_id: orden.asignado_a_id ?? null,
+    completado_por_id: orden.completado_por_id ?? null,
     estado_id: orden.estado_id ?? null,
     fecha: orden.fecha ? String(orden.fecha).replace('T', ' ').substring(0, 16) : "",
     fecha_entrega_estimada: orden.fecha_entrega_estimada
@@ -413,6 +423,8 @@ export default function Edit({
               </div>
             </div>
           </div>
+
+          <ResponsablesSection usuarios={usuarios} estados={estados} formData={data} setFormData={mergeForm} errors={errors} />
 
           {/* Estado (hidden) */}
           <div className="hidden">
