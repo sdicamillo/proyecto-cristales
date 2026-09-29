@@ -37,7 +37,14 @@ class CatalogoVehiculoController extends Controller
             $query->where('nombre', 'like', '%' . $request->modelo_filter . '%');
         }
 
-        $modelos = $query->orderBy('nombre')->paginate(20)->withQueryString();
+        // Primero por marca y después por modelo, para que el listado no mezcle marcas.
+        // Se ordena con una subconsulta en vez de un join para no volver ambiguo el
+        // campo "nombre" que usan los filtros de arriba.
+        $modelos = $query
+            ->orderBy(Marca::select('nombre')->whereColumn('marcas.id', 'modelos.marca_id'))
+            ->orderBy('nombre')
+            ->paginate(20)
+            ->withQueryString();
         $marcas = Marca::orderBy('nombre')->get();
 
         return Inertia::render('CatalogoVehiculos/Index', [

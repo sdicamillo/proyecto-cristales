@@ -59,7 +59,7 @@ type Filters = {
 };
 
 export default function Index({ ordenes }: { ordenes: any }) {
-    const { delete: destroy } = useForm();
+    const anularForm = useForm({ motivo: '' });
 
     /**
      * Requisitos para que esto funcione:
@@ -88,11 +88,23 @@ export default function Index({ ordenes }: { ordenes: any }) {
 
   const [anularOrdenId, setAnularOrdenId] = useState<number | null>(null);
 
-  function handleAnularConfirm() {
-    if (anularOrdenId !== null) {
-      destroy(`/ordenes/${anularOrdenId}`);
-      setAnularOrdenId(null);
-    }
+  function handleAnularConfirm(motivo: string) {
+    if (anularOrdenId === null) return;
+
+    // transform manda el motivo recien capturado sin esperar el re-render de setData.
+    anularForm.transform(() => ({ motivo }));
+    anularForm.delete(`/ordenes/${anularOrdenId}`, {
+      preserveScroll: true,
+      onSuccess: () => {
+        setAnularOrdenId(null);
+        anularForm.reset();
+      },
+    });
+  }
+
+  function handleAnularClose() {
+    setAnularOrdenId(null);
+    anularForm.clearErrors();
   }
 
     const todayISO = useMemo(() => {
@@ -523,9 +535,11 @@ export default function Index({ ordenes }: { ordenes: any }) {
       {anularOrdenId !== null && (
         <ConfirmAnularModal
           open={true}
-          onClose={() => setAnularOrdenId(null)}
+          onClose={handleAnularClose}
           onConfirm={handleAnularConfirm}
           ordenId={anularOrdenId}
+          processing={anularForm.processing}
+          error={anularForm.errors.motivo}
         />
       )}
     </DashboardLayout>

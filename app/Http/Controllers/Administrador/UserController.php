@@ -16,8 +16,8 @@ class UserController extends Controller
     public function index()
     {
         return Inertia::render('Administrador/usuarios', [
-            'users' => User::with('role')->get(),
-            'roles' => Role::all(),
+            'users' => User::with('role')->orderBy('name')->get(),
+            'roles' => Role::orderBy('descripcion')->get(),
             'flash' => session('success'),
         ]);
     }

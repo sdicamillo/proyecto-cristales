@@ -9,7 +9,9 @@ use App\Models\DetalleOrdenAtributo;
 use App\Models\DetalleOrdenDeTrabajo;
 use App\Models\Estado;
 use App\Models\MarcaArticulo;
+use App\Models\Marca;
 use App\Models\MedioDePago;
+use App\Models\Modelo;
 use App\Models\Movimiento;
 use App\Models\OrdenDeTrabajo;
 use App\Models\Precio;
@@ -197,8 +199,10 @@ class OrdenDeTrabajoController extends Controller
             'nuevo_titular' => 'nullable|array',
             'nuevo_vehiculo' => 'nullable|array',
             'nuevo_vehiculo.patente' => 'required_without:vehiculo_id|string|max:10|regex:/^(?:[A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/|unique:vehiculo,patente',
-            'nuevo_vehiculo.marca_id' => 'required_with:nuevo_vehiculo|integer|exists:marcas,id',
-            'nuevo_vehiculo.modelo_id' => 'required_with:nuevo_vehiculo|integer|exists:modelos,id',
+            'nuevo_vehiculo.marca_id' => 'nullable|integer|exists:marcas,id',
+            'nuevo_vehiculo.marca_nueva' => 'nullable|string|max:50',
+            'nuevo_vehiculo.modelo_id' => 'nullable|integer|exists:modelos,id',
+            'nuevo_vehiculo.modelo_nuevo' => 'nullable|string|max:50',
             'nuevo_vehiculo.anio' => 'nullable|integer|min:1900|max:' . date('Y'),
         ], [
             'estado_id.required' => 'Seleccioná un estado para la orden.',
@@ -221,6 +225,9 @@ class OrdenDeTrabajoController extends Controller
             'pagos.*.monto.required' => 'Ingresá el monto del pago.',
             'pagos.*.fecha.required' => 'Ingresá la fecha del pago.',
             'pagos.*.fecha.date' => 'La fecha del pago debe ser válida.',
+            'nuevo_vehiculo.patente.max' => 'La patente no puede superar los 10 caracteres.',
+            'nuevo_vehiculo.marca_nueva.max' => 'El nombre de la marca no puede superar los 50 caracteres.',
+            'nuevo_vehiculo.modelo_nuevo.max' => 'El nombre del modelo no puede superar los 50 caracteres.',
         ]);
 
         $totalOrden = collect($validated['detalles'])->reduce(function ($acc, $detalle) {
@@ -286,6 +293,14 @@ class OrdenDeTrabajoController extends Controller
                 ->withInput();
         }
 
+        if (empty($data['vehiculo_id']) && !empty($data['nuevo_vehiculo'])) {
+            $erroresVehiculo = $this->validarVehiculoNuevo($data['nuevo_vehiculo']);
+
+            if (!empty($erroresVehiculo)) {
+                return back()->withErrors($erroresVehiculo)->withInput();
+            }
+        }
+
         $conFactura = array_key_exists('con_factura', $validated)
             ? (bool) $validated['con_factura']
             : (($validated['tipo_documento'] ?? 'OT') === 'FC');
@@ -302,13 +317,7 @@ class OrdenDeTrabajoController extends Controller
             }
 
             if (empty($data['vehiculo_id']) && !empty($data['nuevo_vehiculo'])) {
-                $nuevoVehiculo = Vehiculo::create([
-                    'patente' => strtoupper($data['nuevo_vehiculo']['patente']),
-                    'marca_id' => $data['nuevo_vehiculo']['marca_id'] ?? null,
-                    'modelo_id' => $data['nuevo_vehiculo']['modelo_id'] ?? null,
-                    'anio' => $data['nuevo_vehiculo']['anio'] ?? null,
-                ]);
-                $data['vehiculo_id'] = $nuevoVehiculo->id;
+                $data['vehiculo_id'] = $this->crearVehiculoNuevo($data['nuevo_vehiculo'])->id;
             }
 
             $pivot = TitularVehiculo::firstOrCreate([
@@ -493,8 +502,10 @@ class OrdenDeTrabajoController extends Controller
             'nuevo_titular.email' => 'nullable|email|max:48',
             'nuevo_vehiculo' => 'nullable|array',
             'nuevo_vehiculo.patente' => 'required_without:vehiculo_id|string|max:10|regex:/^(?:[A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/|unique:vehiculo,patente',
-            'nuevo_vehiculo.marca_id' => 'required_with:nuevo_vehiculo|integer|exists:marcas,id',
-            'nuevo_vehiculo.modelo_id' => 'required_with:nuevo_vehiculo|integer|exists:modelos,id',
+            'nuevo_vehiculo.marca_id' => 'nullable|integer|exists:marcas,id',
+            'nuevo_vehiculo.marca_nueva' => 'nullable|string|max:50',
+            'nuevo_vehiculo.modelo_id' => 'nullable|integer|exists:modelos,id',
+            'nuevo_vehiculo.modelo_nuevo' => 'nullable|string|max:50',
             'nuevo_vehiculo.anio' => 'nullable|integer|min:1900|max:' . date('Y'),
             'estado_id' => 'required|exists:estado,id',
             'fecha' => 'required|date',
@@ -568,6 +579,14 @@ class OrdenDeTrabajoController extends Controller
                 ->withInput();
         }
 
+        if (empty($data['vehiculo_id']) && !empty($data['nuevo_vehiculo'])) {
+            $erroresVehiculo = $this->validarVehiculoNuevo($data['nuevo_vehiculo']);
+
+            if (!empty($erroresVehiculo)) {
+                return back()->withErrors($erroresVehiculo)->withInput();
+            }
+        }
+
         DB::transaction(function () use ($validated, $data, $orden) {
             $estadoAnterior = (int) $orden->estado_id;
 
@@ -582,13 +601,7 @@ class OrdenDeTrabajoController extends Controller
             }
 
             if (empty($data['vehiculo_id']) && !empty($data['nuevo_vehiculo'])) {
-                $nuevoVehiculo = Vehiculo::create([
-                    'patente' => strtoupper($data['nuevo_vehiculo']['patente']),
-                    'marca_id' => $data['nuevo_vehiculo']['marca_id'] ?? null,
-                    'modelo_id' => $data['nuevo_vehiculo']['modelo_id'] ?? null,
-                    'anio' => $data['nuevo_vehiculo']['anio'] ?? null,
-                ]);
-                $data['vehiculo_id'] = $nuevoVehiculo->id;
+                $data['vehiculo_id'] = $this->crearVehiculoNuevo($data['nuevo_vehiculo'])->id;
             }
 
             $pivot = TitularVehiculo::firstOrCreate([
@@ -897,7 +910,7 @@ class OrdenDeTrabajoController extends Controller
             'marcasArticulos' => $marcasArticulos,
         ]);
     }
-    public function destroy(OrdenDeTrabajo $orden)
+    public function destroy(Request $request, OrdenDeTrabajo $orden)
     {
         abort_if($this->isTallerUser(), 403);
 
@@ -911,7 +924,17 @@ class OrdenDeTrabajoController extends Controller
             return back()->withErrors(['error' => 'Esta orden ya fue anulada.']);
         }
 
-        DB::transaction(function () use ($orden, $estadoAnulada) {
+        $validated = $request->validate([
+            'motivo' => ['required', 'string', 'min:5', 'max:500'],
+        ], [
+            'motivo.required' => 'Tenés que indicar el motivo de la anulación.',
+            'motivo.min' => 'El motivo debe tener al menos :min caracteres.',
+            'motivo.max' => 'El motivo no puede superar los :max caracteres.',
+        ]);
+
+        $motivo = trim($validated['motivo']);
+
+        DB::transaction(function () use ($orden, $estadoAnulada, $motivo) {
             // 1) Buscar movimientos de ingreso vinculados a esta OT
             $ingresosExistentes = Movimiento::where('orden_de_trabajo_id', $orden->id)
                 ->where('tipo', Movimiento::TIPO_INGRESO)
@@ -943,6 +966,7 @@ class OrdenDeTrabajoController extends Controller
                 'orden_de_trabajo_id' => $orden->id,
                 'estado_id' => $estadoAnulada->id,
                 'user_id' => auth()->id(),
+                'motivo' => $motivo,
             ]);
         });
 
@@ -981,6 +1005,66 @@ class OrdenDeTrabajoController extends Controller
         }
 
         return $numeroCorrelativo;
+    }
+
+    /**
+     * Valida los datos de un vehículo nuevo. La marca y el modelo pueden venir
+     * del catálogo (marca_id / modelo_id) o escritos a mano (marca_nueva / modelo_nuevo).
+     *
+     * @return array<string, string> Errores por campo (vacío si está todo bien)
+     */
+    private function validarVehiculoNuevo(array $nuevoVehiculo): array
+    {
+        $errores = [];
+
+        if (trim((string) ($nuevoVehiculo['patente'] ?? '')) === '') {
+            $errores['nuevo_vehiculo.patente'] = 'Ingresá la patente del vehículo.';
+        }
+
+        if (empty($nuevoVehiculo['marca_id']) && trim((string) ($nuevoVehiculo['marca_nueva'] ?? '')) === '') {
+            $errores['nuevo_vehiculo.marca_id'] = 'Seleccioná una marca o escribí una nueva.';
+        }
+
+        if (empty($nuevoVehiculo['modelo_id']) && trim((string) ($nuevoVehiculo['modelo_nuevo'] ?? '')) === '') {
+            $errores['nuevo_vehiculo.modelo_id'] = 'Seleccioná un modelo o escribí uno nuevo.';
+        }
+
+        return $errores;
+    }
+
+    /**
+     * Crea el vehículo dando de alta la marca y el modelo si todavía no existen.
+     */
+    private function crearVehiculoNuevo(array $nuevoVehiculo): Vehiculo
+    {
+        $marcaId = $nuevoVehiculo['marca_id'] ?? null;
+        $marcaNueva = trim((string) ($nuevoVehiculo['marca_nueva'] ?? ''));
+
+        if (empty($marcaId) && $marcaNueva !== '') {
+            $marcaId = Marca::firstOrCreate(['nombre' => $marcaNueva])->id;
+        }
+
+        $modeloId = $nuevoVehiculo['modelo_id'] ?? null;
+        $modeloNuevo = trim((string) ($nuevoVehiculo['modelo_nuevo'] ?? ''));
+
+        if (empty($modeloId) && $modeloNuevo !== '' && $marcaId) {
+            $modeloId = Modelo::firstOrCreate([
+                'marca_id' => $marcaId,
+                'nombre' => $modeloNuevo,
+            ])->id;
+        }
+
+        // El modelo siempre tiene que pertenecer a la marca elegida
+        if ($modeloId && $marcaId && !Modelo::where('id', $modeloId)->where('marca_id', $marcaId)->exists()) {
+            $modeloId = null;
+        }
+
+        return Vehiculo::create([
+            'patente' => strtoupper(trim((string) $nuevoVehiculo['patente'])),
+            'marca_id' => $marcaId ? (int) $marcaId : null,
+            'modelo_id' => $modeloId ? (int) $modeloId : null,
+            'anio' => $nuevoVehiculo['anio'] ?? null,
+        ]);
     }
 }
 
