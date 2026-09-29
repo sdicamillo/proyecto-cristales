@@ -39,6 +39,15 @@ interface Orden {
     };
     pagos: Pago[];
     detalles: Detalle[];
+    historial_estados?: HistorialEstado[];
+}
+
+interface HistorialEstado {
+    id: number;
+    created_at: string;
+    motivo: string | null;
+    estado: { id: number; nombre: string };
+    user?: { id: number; name: string } | null;
 }
 
 interface Props {
@@ -61,6 +70,10 @@ export default function PrintableODT({ orden }: Props) {
     const totalPagado = orden.pagos.reduce((acc, curr) => acc + Number(curr.valor), 0);
     const saldoPendiente = totalOrden - totalPagado;
     const companiaNombre = orden.compania_seguro?.nombre ?? "Particular";
+    const anulacion =
+        orden.estado.nombre === "Anulada"
+            ? [...(orden.historial_estados ?? [])].reverse().find((h) => h.estado?.nombre === "Anulada") ?? null
+            : null;
     const fechaFormateada = new Date(orden.fecha).toLocaleDateString("es-AR", {
         day: "2-digit",
         month: "2-digit",
@@ -124,8 +137,8 @@ export default function PrintableODT({ orden }: Props) {
                         fontWeight: 700,
                         borderRadius: '4px',
                         marginBottom: '6px',
-                        background: orden.estado.nombre === "Entregado" ? '#dcfce7' : orden.estado.nombre === "Cancelado" ? '#fee2e2' : '#fef3c7',
-                        color: orden.estado.nombre === "Entregado" ? '#166534' : orden.estado.nombre === "Cancelado" ? '#991b1b' : '#92400e'
+                        background: orden.estado.nombre === "Entregado" ? '#dcfce7' : (orden.estado.nombre === "Cancelado" || orden.estado.nombre === "Anulada") ? '#fee2e2' : '#fef3c7',
+                        color: orden.estado.nombre === "Entregado" ? '#166534' : (orden.estado.nombre === "Cancelado" || orden.estado.nombre === "Anulada") ? '#991b1b' : '#92400e'
                     }}>
                         {orden.estado.nombre.toUpperCase()}
                     </div>
@@ -221,6 +234,22 @@ export default function PrintableODT({ orden }: Props) {
                     )}
                 </div>
             </div>
+
+            {/* Motivo de anulación (solo si la OT está anulada) */}
+            {anulacion && (
+                <div style={{ border: '1px solid #fca5a5', padding: '8px', marginBottom: '10px', background: '#fef2f2' }}>
+                    <h3 style={{ fontSize: '8pt', fontWeight: 700, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 4px 0' }}>
+                        Orden anulada — Motivo
+                    </h3>
+                    <p style={{ fontSize: '9pt', color: '#7f1d1d', margin: 0, whiteSpace: 'pre-wrap' }}>
+                        {anulacion.motivo ?? 'Sin motivo registrado.'}
+                    </p>
+                    <p style={{ fontSize: '8pt', color: '#b91c1c', margin: '4px 0 0 0' }}>
+                        Anulada por {anulacion.user?.name ?? 'Sistema'} el{' '}
+                        {new Date(anulacion.created_at).toLocaleDateString("es-AR")}
+                    </p>
+                </div>
+            )}
 
             {/* Observaciones (solo si hay) */}
             {orden.observacion && (

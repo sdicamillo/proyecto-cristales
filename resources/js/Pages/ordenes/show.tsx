@@ -3,7 +3,7 @@ import PrintableODT from '@/components/print/PrintableODT';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import { PERMISSIONS, useAuthorization } from '@/lib/permissions';
 import { formatDateTimeToArgentina, formatDateToArgentina } from '@/utils/dateFormat';
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowLeft,
@@ -47,6 +47,7 @@ type Pago = {
 type HistorialEstado = {
     id: number;
     created_at: string;
+    motivo: string | null;
     estado: { id: number; nombre: string };
     user?: { id: number; name: string } | null;
 };
@@ -99,12 +100,30 @@ export default function Show({
     const isFinalizada = orden.estado.nombre === 'Finalizada';
     const canManageOrder = canManageOrders && !isAnulada && !isFinalizada;
     const [showAnularModal, setShowAnularModal] = useState(false);
+    const anularForm = useForm({ motivo: '' });
+
+    // Ultima anulacion registrada: es la que explica el estado actual de la orden.
+    const anulacion = isAnulada
+        ? [...(orden.historial_estados ?? [])].reverse().find((h) => h.estado?.nombre === 'Anulada') ?? null
+        : null;
 
     const formatMoney = (value: number) => `$${value.toLocaleString('es-AR')}`;
 
-    function handleAnular() {
-        router.delete(`/ordenes/${orden.id}`);
+    function handleAnular(motivo: string) {
+        // transform manda el motivo recien capturado sin esperar el re-render de setData.
+        anularForm.transform(() => ({ motivo }));
+        anularForm.delete(`/ordenes/${orden.id}`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setShowAnularModal(false);
+                anularForm.reset();
+            },
+        });
+    }
+
+    function handleAnularClose() {
         setShowAnularModal(false);
+        anularForm.clearErrors();
     }
 
     return (
@@ -113,11 +132,29 @@ export default function Show({
 
             <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 print:hidden">
                 {isAnulada && !esTaller && (
-                    <div className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-6 py-4">
-                        <Ban className="h-6 w-6 text-red-500" />
-                        <div>
-                            <p className="font-bold text-red-800">Orden anulada</p>
-                            <p className="text-sm text-red-600">Esta orden fue anulada y el sistema generó los movimientos de reversa correspondientes.</p>
+                    <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-6 py-4">
+                        <div className="flex items-start gap-3">
+                            <Ban className="mt-0.5 h-6 w-6 shrink-0 text-red-500" />
+                            <div className="min-w-0 flex-1">
+                                <p className="font-bold text-red-800">Orden anulada</p>
+                                <p className="text-sm text-red-600">
+                                    Esta orden fue anulada y el sistema generó los movimientos de reversa correspondientes.
+                                </p>
+
+                                {anulacion?.motivo && (
+                                    <div className="mt-3 rounded-xl border border-red-200 bg-white/70 px-4 py-3">
+                                        <p className="text-xs font-semibold uppercase tracking-wider text-red-700">Motivo</p>
+                                        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-red-900">{anulacion.motivo}</p>
+                                    </div>
+                                )}
+
+                                {anulacion && (
+                                    <p className="mt-2 text-xs text-red-500">
+                                        Anulada por {anulacion.user?.name ?? 'Sistema'} el{' '}
+                                        {formatDateTimeToArgentina(anulacion.created_at)}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -322,11 +359,20 @@ export default function Show({
                                             {index !== orden.historial_estados!.length - 1 && (
                                                 <div className="absolute bottom-0 left-2 top-4 w-px bg-gray-200"></div>
                                             )}
-                                            <div className="absolute left-0 top-1.5 h-4 w-4 rounded-full border-4 border-white bg-green-500 shadow"></div>
+                                            <div
+                                                className={`absolute left-0 top-1.5 h-4 w-4 rounded-full border-4 border-white shadow ${
+                                                    h.estado?.nombre === 'Anulada' ? 'bg-red-500' : 'bg-green-500'
+                                                }`}
+                                            ></div>
                                             <div className="ml-4">
                                                 <div className="font-semibold text-gray-900">{h.estado?.nombre}</div>
                                                 <div className="text-sm text-gray-500">{formatDateTimeToArgentina(h.created_at)}</div>
                                                 <div className="mt-1 text-xs text-gray-400">{h.user?.name ?? 'Sistema'}</div>
+                                                {h.motivo && (
+                                                    <p className="mt-2 whitespace-pre-wrap break-words rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                                                        {h.motivo}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -395,8 +441,10 @@ export default function Show({
             {canManageOrders && (
                 <ConfirmAnularModal
                     open={showAnularModal}
-                    onClose={() => setShowAnularModal(false)}
+                    onClose={handleAnularClose}
                     onConfirm={handleAnular}
+                    processing={anularForm.processing}
+                    error={anularForm.errors.motivo}
                     ordenId={orden.id}
                 />
             )}

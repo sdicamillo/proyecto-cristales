@@ -13,7 +13,8 @@ class OrdenDeTrabajoHistorialEstado extends Model
         protected $fillable = [
             'orden_de_trabajo_id',
             'estado_id',
-            'user_id'
+            'user_id',
+            'motivo',
         ];
 
         public function estado()

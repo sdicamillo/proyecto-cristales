@@ -915,7 +915,7 @@ class OrdenDeTrabajoController extends Controller
             'mediosDePago' => $mediosDePago,
         ]);
     }
-    public function destroy(OrdenDeTrabajo $orden)
+    public function destroy(Request $request, OrdenDeTrabajo $orden)
     {
         abort_if($this->isTallerUser(), 403);
 
@@ -929,7 +929,17 @@ class OrdenDeTrabajoController extends Controller
             return back()->withErrors(['error' => 'Esta orden ya fue anulada.']);
         }
 
-        DB::transaction(function () use ($orden, $estadoAnulada) {
+        $validated = $request->validate([
+            'motivo' => ['required', 'string', 'min:5', 'max:500'],
+        ], [
+            'motivo.required' => 'Tenés que indicar el motivo de la anulación.',
+            'motivo.min' => 'El motivo debe tener al menos :min caracteres.',
+            'motivo.max' => 'El motivo no puede superar los :max caracteres.',
+        ]);
+
+        $motivo = trim($validated['motivo']);
+
+        DB::transaction(function () use ($orden, $estadoAnulada, $motivo) {
             // 1) Buscar movimientos de ingreso vinculados a esta OT
             $ingresosExistentes = Movimiento::where('orden_de_trabajo_id', $orden->id)
                 ->where('tipo', Movimiento::TIPO_INGRESO)
@@ -961,6 +971,7 @@ class OrdenDeTrabajoController extends Controller
                 'orden_de_trabajo_id' => $orden->id,
                 'estado_id' => $estadoAnulada->id,
                 'user_id' => auth()->id(),
+                'motivo' => $motivo,
             ]);
         });
 
