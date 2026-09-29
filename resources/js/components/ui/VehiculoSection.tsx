@@ -1,6 +1,7 @@
 import { Car, Plus } from "lucide-react";
 import { useState, forwardRef, useImperativeHandle, useEffect } from "react";
 import Select from "react-select";
+import CreatableSelect from "react-select/creatable";
 import axios from "axios";
 import DeleteButton from "@/components/botones/boton-eliminar";
 import { ordenarPorEtiqueta } from "@/lib/utils";
@@ -36,17 +37,38 @@ export interface VehiculoSectionRef {
   validate: () => boolean;
 }
 
+// Marca/modelo pueden venir del catálogo (marca_id / modelo_id) o escribirse a mano
+// (marca_nueva / modelo_nuevo); el backend los da de alta al guardar la orden.
+const VEHICULO_VACIO = {
+  patente: "",
+  marca_id: null as number | null,
+  marca_nueva: "",
+  modelo_id: null as number | null,
+  modelo_nuevo: "",
+  anio: new Date().getFullYear(),
+};
+
+const MAX_NOMBRE = 50;
+
+// Opción de catálogo; react-select marca con __isNew__ las que escribe el usuario
+type OpcionCatalogo = {
+  value: number | null;
+  label: string;
+  __isNew__?: boolean;
+};
+
+const tieneMarca = (v: { marca_id: number | null; marca_nueva?: string }) =>
+  Boolean(v.marca_id) || Boolean(v.marca_nueva?.trim());
+
+const tieneModelo = (v: { modelo_id: number | null; modelo_nuevo?: string }) =>
+  Boolean(v.modelo_id) || Boolean(v.modelo_nuevo?.trim());
+
 const VehiculoSection = forwardRef<VehiculoSectionRef, Props>(
   ({ vehiculos, formData, setFormData }, ref) => {
     const [showNew, setShowNew] = useState(false);
     const [marcas, setMarcas] = useState<Marca[]>([]);
     const [modelos, setModelos] = useState<Modelo[]>([]);
-    const [nuevoVehiculo, setNuevoVehiculo] = useState({
-      patente: "",
-      marca_id: null as number | null,
-      modelo_id: null as number | null,
-      anio: new Date().getFullYear(),
-    });
+    const [nuevoVehiculo, setNuevoVehiculo] = useState({ ...VEHICULO_VACIO });
     const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
 
     // Cargar marcas al montar el componente
@@ -76,8 +98,8 @@ const VehiculoSection = forwardRef<VehiculoSectionRef, Props>(
         } else if (formData.nuevo_vehiculo) {
           const v = formData.nuevo_vehiculo;
           if (!v.patente?.trim()) errs["nuevo_vehiculo.patente"] = "La patente es obligatoria.";
-          if (!v.marca_id) errs["nuevo_vehiculo.marca_id"] = "La marca es obligatoria.";
-          if (!v.modelo_id) errs["nuevo_vehiculo.modelo_id"] = "El modelo es obligatorio.";
+          if (!tieneMarca(v)) errs["nuevo_vehiculo.marca_id"] = "La marca es obligatoria.";
+          if (!tieneModelo(v)) errs["nuevo_vehiculo.modelo_id"] = "El modelo es obligatorio.";
         }
         setLocalErrors(errs);
         return Object.keys(errs).length === 0;
@@ -98,7 +120,7 @@ const VehiculoSection = forwardRef<VehiculoSectionRef, Props>(
     );
 
     // Opciones para selector de marcas
-    const marcaOptions = ordenarPorEtiqueta(
+    const marcaOptions: OpcionCatalogo[] = ordenarPorEtiqueta(
       marcas.map(m => ({
         value: m.id,
         label: m.nombre
@@ -107,13 +129,37 @@ const VehiculoSection = forwardRef<VehiculoSectionRef, Props>(
     );
 
     // Opciones para selector de modelos
-    const modeloOptions = ordenarPorEtiqueta(
+    const modeloOptions: OpcionCatalogo[] = ordenarPorEtiqueta(
       modelos.map(m => ({
         value: m.id,
         label: m.nombre
       })),
       (o) => o.label
     );
+
+    // Valor mostrado: opción del catálogo, o la marca/modelo tipeada a mano
+    const marcaValue: OpcionCatalogo | null = nuevoVehiculo.marca_id
+      ? marcaOptions.find(opt => opt.value === nuevoVehiculo.marca_id) || null
+      : nuevoVehiculo.marca_nueva
+        ? { value: null, label: nuevoVehiculo.marca_nueva }
+        : null;
+
+    const modeloValue: OpcionCatalogo | null = nuevoVehiculo.modelo_id
+      ? modeloOptions.find(opt => opt.value === nuevoVehiculo.modelo_id) || null
+      : nuevoVehiculo.modelo_nuevo
+        ? { value: null, label: nuevoVehiculo.modelo_nuevo }
+        : null;
+
+    // Sólo ofrece "Agregar" si el nombre es válido y no existe ya en el catálogo
+    const esNombreValido = (input: string, _seleccion: unknown, opciones: readonly unknown[]) => {
+      const nombre = input.trim();
+      if (!nombre || nombre.length > MAX_NOMBRE) return false;
+      return !opciones.some(
+        (o) => String((o as OpcionCatalogo).label).toLowerCase() === nombre.toLowerCase()
+      );
+    };
+
+    const formatCreateLabel = (input: string) => `Agregar "${input.trim()}"`;
 
     // === Estilos para react-select ===
     const classNames = {
@@ -237,28 +283,31 @@ const VehiculoSection = forwardRef<VehiculoSectionRef, Props>(
     const handleSaveNew = () => {
       const errs: Record<string, string> = {};
       if (!nuevoVehiculo.patente.trim()) errs.patente = "La patente es obligatoria.";
-      if (!nuevoVehiculo.marca_id) errs.marca_id = "La marca es obligatoria.";
-      if (!nuevoVehiculo.modelo_id) errs.modelo_id = "El modelo es obligatorio.";
+      if (!tieneMarca(nuevoVehiculo)) errs.marca_id = "La marca es obligatoria.";
+      if (!tieneModelo(nuevoVehiculo)) errs.modelo_id = "El modelo es obligatorio.";
       setLocalErrors(errs);
       if (Object.keys(errs).length) return;
+
+      const marcaNueva = nuevoVehiculo.marca_nueva.trim();
+      const modeloNuevo = nuevoVehiculo.modelo_nuevo.trim();
 
       setFormData({
         vehiculo_id: null,
         nuevo_vehiculo: {
-          ...nuevoVehiculo,
-          marca_nombre: marcas.find(m => m.id === nuevoVehiculo.marca_id)?.nombre,
-          modelo_nombre: modelos.find(m => m.id === nuevoVehiculo.modelo_id)?.nombre
+          patente: nuevoVehiculo.patente.trim().toUpperCase(),
+          marca_id: nuevoVehiculo.marca_id,
+          marca_nueva: marcaNueva || null,
+          modelo_id: nuevoVehiculo.modelo_id,
+          modelo_nuevo: modeloNuevo || null,
+          anio: nuevoVehiculo.anio,
+          marca_nombre: marcaNueva || marcas.find(m => m.id === nuevoVehiculo.marca_id)?.nombre,
+          modelo_nombre: modeloNuevo || modelos.find(m => m.id === nuevoVehiculo.modelo_id)?.nombre,
         },
       });
 
       setShowNew(false);
       setLocalErrors({});
-      setNuevoVehiculo({
-        patente: "",
-        marca_id: null,
-        modelo_id: null,
-        anio: new Date().getFullYear(),
-      });
+      setNuevoVehiculo({ ...VEHICULO_VACIO });
     };
 
     const handleRemove = () => {
@@ -273,10 +322,11 @@ const VehiculoSection = forwardRef<VehiculoSectionRef, Props>(
     const resumenLabel = formData.nuevo_vehiculo
       ? (() => {
         const v = formData.nuevo_vehiculo;
-        const marcaNombre = v.marca_nombre || marcas.find(m => m.id === v.marca_id)?.nombre || 'Sin marca';
+        const marcaNombre = v.marca_nombre || v.marca_nueva || marcas.find(m => m.id === v.marca_id)?.nombre || 'Sin marca';
         // Usar modelo_nombre guardado o intentar buscarlo (aunque models podría estar vacío si cambió la marca)
-        const modeloNombre = v.modelo_nombre || modelos.find(m => m.id === v.modelo_id)?.nombre || 'Sin modelo';
-        return `${v.patente} — ${marcaNombre} ${modeloNombre} (${v.anio})`;
+        const modeloNombre = v.modelo_nombre || v.modelo_nuevo || modelos.find(m => m.id === v.modelo_id)?.nombre || 'Sin modelo';
+        const esNuevoEnCatalogo = Boolean(v.marca_nueva || v.modelo_nuevo);
+        return `${v.patente} — ${marcaNombre} ${modeloNombre} (${v.anio})${esNuevoEnCatalogo ? ' · se agregará al catálogo' : ''}`;
       })()
       : options.find((o) => o.value === formData.vehiculo_id)?.label;
 
@@ -334,12 +384,21 @@ const VehiculoSection = forwardRef<VehiculoSectionRef, Props>(
             </div>
 
             <div>
-              <Select
+              <CreatableSelect
                 options={marcaOptions}
-                placeholder="Seleccionar Marca *"
+                placeholder="Seleccionar o escribir Marca *"
                 isClearable
-                value={marcaOptions.find(opt => opt.value === nuevoVehiculo.marca_id) || null}
-                onChange={(option) => setNuevoVehiculo(prev => ({ ...prev, marca_id: option?.value || null, modelo_id: null }))}
+                value={marcaValue}
+                onChange={(option: OpcionCatalogo | null) => setNuevoVehiculo(prev => ({
+                  ...prev,
+                  marca_id: option && !option.__isNew__ ? option.value : null,
+                  marca_nueva: option?.__isNew__ ? option.label.trim() : "",
+                  // Los modelos dependen de la marca: al cambiarla se limpia la selección
+                  modelo_id: null,
+                  modelo_nuevo: "",
+                }))}
+                isValidNewOption={esNombreValido}
+                formatCreateLabel={formatCreateLabel}
                 classNames={classNames}
                 styles={styles}
                 theme={theme}
@@ -349,13 +408,20 @@ const VehiculoSection = forwardRef<VehiculoSectionRef, Props>(
             </div>
 
             <div>
-              <Select
+              <CreatableSelect
                 options={modeloOptions}
-                placeholder="Seleccionar Modelo *"
+                placeholder="Seleccionar o escribir Modelo *"
                 isClearable
-                isDisabled={!nuevoVehiculo.marca_id}
-                value={modeloOptions.find(opt => opt.value === nuevoVehiculo.modelo_id) || null}
-                onChange={(option) => setNuevoVehiculo(prev => ({ ...prev, modelo_id: option?.value || null }))}
+                isDisabled={!tieneMarca(nuevoVehiculo)}
+                value={modeloValue}
+                onChange={(option: OpcionCatalogo | null) => setNuevoVehiculo(prev => ({
+                  ...prev,
+                  modelo_id: option && !option.__isNew__ ? option.value : null,
+                  modelo_nuevo: option?.__isNew__ ? option.label.trim() : "",
+                }))}
+                isValidNewOption={esNombreValido}
+                formatCreateLabel={formatCreateLabel}
+                noOptionsMessage={() => "Escribí el modelo para agregarlo"}
                 classNames={classNames}
                 styles={styles}
                 theme={theme}
@@ -386,12 +452,7 @@ const VehiculoSection = forwardRef<VehiculoSectionRef, Props>(
                 type="button"
                 onClick={() => {
                   setShowNew(false);
-                  setNuevoVehiculo({
-                    patente: "",
-                    marca_id: null,
-                    modelo_id: null,
-                    anio: new Date().getFullYear(),
-                  });
+                  setNuevoVehiculo({ ...VEHICULO_VACIO });
                   setLocalErrors({});
                 }}
                 className="h-12 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition"
