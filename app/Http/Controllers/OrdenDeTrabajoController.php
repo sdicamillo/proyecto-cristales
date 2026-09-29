@@ -8,6 +8,7 @@ use App\Models\Concepto;
 use App\Models\DetalleOrdenAtributo;
 use App\Models\DetalleOrdenDeTrabajo;
 use App\Models\Estado;
+use App\Models\User;
 use App\Models\MarcaArticulo;
 use App\Models\Marca;
 use App\Models\MedioDePago;
@@ -152,6 +153,7 @@ class OrdenDeTrabajoController extends Controller
         return Inertia::render('ordenes/createOrdenes', [
             'titulares' => $titulares,
             'estados' => $estados,
+            'usuarios' => User::orderBy('name')->get(['id', 'name']),
             'mediosDePago' => $mediosDePago,
             'articulos' => $articulos,
             'companiasSeguros' => $companiasSeguros,
@@ -167,6 +169,8 @@ class OrdenDeTrabajoController extends Controller
 
         $validated = $request->validate([
             'estado_id' => 'required|exists:estado,id',
+            'asignado_a_id' => ['nullable', 'integer', 'exists:users,id'],
+            'completado_por_id' => [Rule::requiredIf(fn () => Estado::whereKey($request->input('estado_id'))->whereIn('nombre', [Estado::NOMBRE_FINALIZADA, Estado::NOMBRE_RETIRADA])->exists()), 'nullable', 'integer', 'exists:users,id'],
             'fecha' => 'required|date',
             'fecha_entrega_estimada' => 'required|date|after_or_equal:fecha',
             'observacion' => 'nullable|string|max:500',
@@ -198,13 +202,16 @@ class OrdenDeTrabajoController extends Controller
             'vehiculo_id' => 'nullable|integer|exists:vehiculo,id',
             'nuevo_titular' => 'nullable|array',
             'nuevo_vehiculo' => 'nullable|array',
-            'nuevo_vehiculo.patente' => 'required_without:vehiculo_id|string|max:10|regex:/^(?:[A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/|unique:vehiculo,patente',
+            'nuevo_vehiculo.patente' => ['required_without:vehiculo_id', 'string', 'max:10', 'regex:/^(?:[A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/', 'unique:vehiculo,patente'],
             'nuevo_vehiculo.marca_id' => 'nullable|integer|exists:marcas,id',
             'nuevo_vehiculo.marca_nueva' => 'nullable|string|max:50',
             'nuevo_vehiculo.modelo_id' => 'nullable|integer|exists:modelos,id',
             'nuevo_vehiculo.modelo_nuevo' => 'nullable|string|max:50',
             'nuevo_vehiculo.anio' => 'nullable|integer|min:1900|max:' . date('Y'),
         ], [
+            'completado_por_id.required' => 'Seleccioná quién completó el trabajo.',
+            'completado_por_id.exists' => 'La persona seleccionada no existe.',
+            'asignado_a_id.exists' => 'La persona asignada no existe.',
             'estado_id.required' => 'Seleccioná un estado para la orden.',
             'fecha.required' => 'La fecha de la orden es obligatoria.',
             'fecha_entrega_estimada.required' => 'Ingresá una fecha de entrega estimada.',
@@ -331,6 +338,8 @@ class OrdenDeTrabajoController extends Controller
             $orden = OrdenDeTrabajo::create([
                 'titular_vehiculo_id' => $pivot->id,
                 'estado_id' => $validated['estado_id'],
+                'asignado_a_id' => $validated['asignado_a_id'] ?? null,
+                'completado_por_id' => $validated['completado_por_id'] ?? null,
                 'fecha' => $validated['fecha'],
                 'fecha_entrega_estimada' => $validated['fecha_entrega_estimada'],
                 'numero_orden' => $numeroCorrelativo,
@@ -501,13 +510,15 @@ class OrdenDeTrabajoController extends Controller
             'nuevo_titular.telefono' => 'nullable|string|max:20',
             'nuevo_titular.email' => 'nullable|email|max:48',
             'nuevo_vehiculo' => 'nullable|array',
-            'nuevo_vehiculo.patente' => 'required_without:vehiculo_id|string|max:10|regex:/^(?:[A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/|unique:vehiculo,patente',
+            'nuevo_vehiculo.patente' => ['required_without:vehiculo_id', 'string', 'max:10', 'regex:/^(?:[A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/', 'unique:vehiculo,patente'],
             'nuevo_vehiculo.marca_id' => 'nullable|integer|exists:marcas,id',
             'nuevo_vehiculo.marca_nueva' => 'nullable|string|max:50',
             'nuevo_vehiculo.modelo_id' => 'nullable|integer|exists:modelos,id',
             'nuevo_vehiculo.modelo_nuevo' => 'nullable|string|max:50',
             'nuevo_vehiculo.anio' => 'nullable|integer|min:1900|max:' . date('Y'),
             'estado_id' => 'required|exists:estado,id',
+            'asignado_a_id' => ['nullable', 'integer', 'exists:users,id'],
+            'completado_por_id' => [Rule::requiredIf(fn () => Estado::whereKey($request->input('estado_id'))->whereIn('nombre', [Estado::NOMBRE_FINALIZADA, Estado::NOMBRE_RETIRADA])->exists()), 'nullable', 'integer', 'exists:users,id'],
             'fecha' => 'required|date',
             'observacion' => 'nullable|string|max:500',
             'con_factura' => 'required|boolean',
@@ -536,6 +547,10 @@ class OrdenDeTrabajoController extends Controller
             'pagos.*.pagado' => 'required|boolean',
             'pagos.*.bloqueado' => 'nullable|boolean',
             'pagos.*.observacion' => 'nullable|string|max:255',
+        ], [
+            'completado_por_id.required' => 'Seleccioná quién completó el trabajo.',
+            'completado_por_id.exists' => 'La persona seleccionada no existe.',
+            'asignado_a_id.exists' => 'La persona asignada no existe.',
         ]);
 
         $totalOrden = collect($validated['detalles'])->reduce(function ($acc, $detalle) {
@@ -620,6 +635,8 @@ class OrdenDeTrabajoController extends Controller
             $orden->update([
                 'titular_vehiculo_id' => $pivot->id,
                 'estado_id' => $validated['estado_id'],
+                'asignado_a_id' => array_key_exists('asignado_a_id', $validated) ? $validated['asignado_a_id'] : $orden->asignado_a_id,
+                'completado_por_id' => array_key_exists('completado_por_id', $validated) ? $validated['completado_por_id'] : $orden->completado_por_id,
                 'fecha' => $validated['fecha'],
                 'observacion' => $validated['observacion'] ?? null,
                 'con_factura' => $conFacturaFinal,
@@ -819,6 +836,8 @@ class OrdenDeTrabajoController extends Controller
             'detalles.atributos.subcategoria',
             'pagos.medioDePago',
             'companiaSeguro',
+            'asignadoA:id,name',
+            'completadoPor:id,name',
             'historialEstados.estado',
             'historialEstados.user',
         ]);
@@ -906,6 +925,7 @@ class OrdenDeTrabajoController extends Controller
             'articulos' => $articulos,
             'companiasSeguros' => $companiasSeguros,
             'estados' => $estados,
+            'usuarios' => User::orderBy('name')->get(['id', 'name']),
             'mediosDePago' => $mediosDePago,
             'marcasArticulos' => $marcasArticulos,
         ]);

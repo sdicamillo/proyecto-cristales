@@ -15,6 +15,8 @@ class OrdenDeTrabajo extends Model
         'titular_vehiculo_id',
         'compania_seguro_id',
         'estado_id',
+        'asignado_a_id',
+        'completado_por_id',
         'fecha',
         'con_factura',
         'observacion',
@@ -32,6 +34,16 @@ class OrdenDeTrabajo extends Model
     public function titularVehiculo()
     {
         return $this->belongsTo(TitularVehiculo::class, 'titular_vehiculo_id');
+    }
+
+    public function asignadoA()
+    {
+        return $this->belongsTo(User::class, 'asignado_a_id');
+    }
+
+    public function completadoPor()
+    {
+        return $this->belongsTo(User::class, 'completado_por_id');
     }
 
     public function estado()

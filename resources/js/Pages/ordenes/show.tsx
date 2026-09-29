@@ -54,6 +54,8 @@ type HistorialEstado = {
 };
 
 type Orden = {
+    asignado_a?: { id: number; name: string } | null;
+    completado_por?: { id: number; name: string } | null;
     id: number;
     fecha: string;
     observacion: string | null;
@@ -386,6 +388,13 @@ export default function Show({
                             </div>
                         )}
 
+                        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                            <h2 className="mb-3 font-bold text-gray-900">Responsables del trabajo</h2>
+                            <dl className="grid gap-4 sm:grid-cols-2">
+                                <div><dt className="text-sm text-gray-500">Asignado a</dt><dd className="font-medium text-gray-900">{orden.asignado_a?.name ?? 'Sin asignar'}</dd></div>
+                                <div><dt className="text-sm text-gray-500">Completado por</dt><dd className="font-medium text-gray-900">{orden.completado_por?.name ?? 'Sin registrar'}</dd></div>
+                            </dl>
+                        </div>
                         {orden.observacion && (
                             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                                 <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50/50 px-6 py-4">
