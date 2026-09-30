@@ -21,6 +21,8 @@ class Movimiento extends Model
     protected $fillable = [
         'fecha',
         'monto',
+        'monto_usd',
+        'tipo_cambio',
         'concepto_id',
         'medio_de_pago_id',
         'tipo',
@@ -30,6 +32,8 @@ class Movimiento extends Model
     protected $casts = [
         'fecha' => 'datetime',
         'monto' => 'float',
+        'monto_usd' => 'float',
+        'tipo_cambio' => 'float',
     ];
 
     /* ======================
@@ -86,14 +90,34 @@ class Movimiento extends Model
      * ====================== */
 
     /**
-     * Totales de ingresos/egresos para una fecha (Y-m-d).
+     * Totales en pesos de ingresos/egresos para una fecha (Y-m-d).
+     * Los movimientos en dólares no suman acá: van en totalsUsdForDate().
      */
     public static function totalsForDate(string $date): array
     {
         $row = self::query()
             ->selectRaw("
-                COALESCE(SUM(CASE WHEN tipo = ? THEN monto ELSE 0 END), 0) as ingresos,
-                COALESCE(SUM(CASE WHEN tipo = ? THEN monto ELSE 0 END), 0) as egresos
+                COALESCE(SUM(CASE WHEN tipo = ? AND monto_usd IS NULL THEN monto ELSE 0 END), 0) as ingresos,
+                COALESCE(SUM(CASE WHEN tipo = ? AND monto_usd IS NULL THEN monto ELSE 0 END), 0) as egresos
+            ", [self::TIPO_INGRESO, self::TIPO_EGRESO])
+            ->whereDate('fecha', $date)
+            ->first();
+
+        return [
+            'ingresos' => (float) ($row->ingresos ?? 0),
+            'egresos'  => (float) ($row->egresos ?? 0),
+        ];
+    }
+
+    /**
+     * Totales en USD de ingresos/egresos para una fecha (Y-m-d).
+     */
+    public static function totalsUsdForDate(string $date): array
+    {
+        $row = self::query()
+            ->selectRaw("
+                COALESCE(SUM(CASE WHEN tipo = ? THEN monto_usd ELSE 0 END), 0) as ingresos,
+                COALESCE(SUM(CASE WHEN tipo = ? THEN monto_usd ELSE 0 END), 0) as egresos
             ", [self::TIPO_INGRESO, self::TIPO_EGRESO])
             ->whereDate('fecha', $date)
             ->first();
@@ -106,7 +130,9 @@ class Movimiento extends Model
 
     /**
      * Agrupación por medio de pago para una fecha y tipo.
-     * Devuelve: medio_de_pago_id, medio, total, cantidad, porcentaje
+     * Devuelve: medio_de_pago_id, medio, moneda, total, total_usd, cantidad, porcentaje
+     * Pesos y dólares van separados: "total" solo suma pesos, "total_usd" solo dólares,
+     * y el porcentaje es sobre el total en pesos (null en las filas en dólares).
      */
     public static function groupedByMedioPago(string $date, string $tipo): Collection
     {
@@ -114,10 +140,11 @@ class Movimiento extends Model
             throw new \InvalidArgumentException("Tipo de movimiento inválido: {$tipo}");
         }
 
-        // Total para calcular % (por tipo)
+        // Total en pesos para calcular % (por tipo)
         $total = (float) self::query()
             ->whereDate('fecha', $date)
             ->where('tipo', $tipo)
+            ->whereNull('monto_usd')
             ->sum('monto');
 
         $rows = DB::table('movimiento as m')
@@ -125,19 +152,24 @@ class Movimiento extends Model
             ->selectRaw("
                 COALESCE(m.medio_de_pago_id, 0) as medio_de_pago_id,
                 COALESCE(mp.nombre, 'Sin medio') as medio,
-                COALESCE(SUM(m.monto), 0) as total,
+                COALESCE(mp.moneda, 'ARS') as moneda,
+                COALESCE(SUM(CASE WHEN m.monto_usd IS NULL THEN m.monto ELSE 0 END), 0) as total,
+                SUM(m.monto_usd) as total_usd,
                 COUNT(*) as cantidad
             ")
             ->whereDate('m.fecha', $date)
             ->where('m.tipo', $tipo)
-            ->groupBy('m.medio_de_pago_id', 'mp.nombre')
+            ->groupBy('m.medio_de_pago_id', 'mp.nombre', 'mp.moneda')
             ->orderByDesc('total')
             ->get();
 
         return $rows->map(function ($r) use ($total) {
             $r->total = (float) $r->total;
+            $r->total_usd = $r->total_usd !== null ? (float) $r->total_usd : null;
             $r->cantidad = (int) $r->cantidad;
-            $r->porcentaje = $total > 0 ? round(($r->total / $total) * 100, 2) : 0.0;
+            $r->porcentaje = $r->total_usd !== null
+                ? null
+                : ($total > 0 ? round(($r->total / $total) * 100, 2) : 0.0);
             return $r;
         });
     }

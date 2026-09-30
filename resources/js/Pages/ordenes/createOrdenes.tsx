@@ -38,6 +38,8 @@ type FormData = {
         fecha: string;
         pagado: boolean;
         observacion: string;
+        monto_usd?: number | string | null;
+        tipo_cambio?: number | string | null;
     }>;
     observacion: string;
     fecha: string;

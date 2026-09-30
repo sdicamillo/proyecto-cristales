@@ -22,6 +22,7 @@ class DailySummaryController extends Controller
 
         $totals = Movimiento::totalsForDate($date);
         $neto = $totals['ingresos'] - $totals['egresos'];
+        $totalsUsd = Movimiento::totalsUsdForDate($date);
 
         $ingresosPorMedio = Movimiento::groupedByMedioPago($date, 'ingreso');
         $egresosPorMedio = Movimiento::groupedByMedioPago($date, 'egreso');
@@ -32,6 +33,11 @@ class DailySummaryController extends Controller
                 'ingresos' => $totals['ingresos'],
                 'egresos' => $totals['egresos'],
                 'neto' => $neto,
+            ],
+            'kpisUsd' => [
+                'ingresos' => $totalsUsd['ingresos'],
+                'egresos' => $totalsUsd['egresos'],
+                'neto' => $totalsUsd['ingresos'] - $totalsUsd['egresos'],
             ],
             'ingresosPorMedio' => $ingresosPorMedio,
             'egresosPorMedio' => $egresosPorMedio,
@@ -54,6 +60,7 @@ class DailySummaryController extends Controller
     $ingresos = (float) ($totals['ingresos'] ?? 0);
     $egresos  = (float) ($totals['egresos'] ?? 0);
     $neto     = $ingresos - $egresos;
+    $totalsUsd = Movimiento::totalsUsdForDate($date);
 
     // Tablas por medio de pago
     $ingresosPorMedio = Movimiento::groupedByMedioPago($date, Movimiento::TIPO_INGRESO);
@@ -65,6 +72,11 @@ class DailySummaryController extends Controller
             'ingresos' => $ingresos,
             'egresos' => $egresos,
             'neto' => $neto,
+        ],
+        'kpisUsd' => [
+            'ingresos' => $totalsUsd['ingresos'],
+            'egresos' => $totalsUsd['egresos'],
+            'neto' => $totalsUsd['ingresos'] - $totalsUsd['egresos'],
         ],
         'ingresosPorMedio' => $ingresosPorMedio,
         'egresosPorMedio' => $egresosPorMedio,

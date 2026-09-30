@@ -5,6 +5,7 @@ import { Movimiento } from '@/types/movimiento';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import EditButton from '@/components/botones/boton-editar';
 import ViewButton from '@/components/botones/boton-ver';
+import MontoConDolares, { TotalDolares } from '@/components/ui/MontoConDolares';
 import { formatDateTimeToArgentina } from '@/utils/dateFormat';
 import { Lock } from 'lucide-react';
 
@@ -17,6 +18,10 @@ interface Props {
 export default function Index({ movimientos, tipo, label }: Props) {
     const labelPlural = label.endsWith('s') ? label : `${label}s`;
     const tipoPlural = tipo.endsWith('s') ? tipo : `${tipo}s`;
+
+    // Pesos y dólares por separado: los movimientos en USD no suman a los pesos
+    const totalPesos = movimientos.reduce((sum, m) => (m.monto_usd == null ? sum + Number(m.monto) : sum), 0);
+    const totalUsd = movimientos.reduce((sum, m) => sum + Number(m.monto_usd ?? 0), 0);
 
     const formatMoney = (amount: number) => {
         return new Intl.NumberFormat('es-AR', {
@@ -129,7 +134,12 @@ export default function Index({ movimientos, tipo, label }: Props) {
                                                     className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${tipo === 'egreso' ? 'text-red-600' : 'text-green-600'
                                                         }`}
                                                 >
-                                                    {formatMoney(movimiento.monto)}
+                                                    <MontoConDolares
+                                                        monto={movimiento.monto}
+                                                        montoUsd={movimiento.monto_usd}
+                                                        tipoCambio={movimiento.tipo_cambio}
+                                                        formatMonto={formatMoney}
+                                                    />
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                                                     <div className="flex justify-end gap-2">
@@ -163,11 +173,14 @@ export default function Index({ movimientos, tipo, label }: Props) {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div className="flex justify-between items-center">
                                 <span className="text-gray-600 font-medium">Total de {tipoPlural.toLowerCase()}:</span>
-                                <span
-                                    className={`text-2xl font-bold ${tipo === 'egreso' ? 'text-red-600' : 'text-green-600'
-                                        }`}
-                                >
-                                    {formatMoney(movimientos.reduce((sum, m) => sum + Number(m.monto), 0))}
+                                <span className="flex flex-col items-end">
+                                    <span
+                                        className={`text-2xl font-bold ${tipo === 'egreso' ? 'text-red-600' : 'text-green-600'
+                                            }`}
+                                    >
+                                        {formatMoney(totalPesos)}
+                                    </span>
+                                    <TotalDolares valor={totalUsd} className="text-2xl text-emerald-700" />
                                 </span>
                             </div>
                             <div className="flex justify-between items-center">

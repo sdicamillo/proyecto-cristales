@@ -53,13 +53,10 @@ class DashboardController extends Controller
         $ultimosIngresos = collect();
 
         if ($canViewFinancialDashboard) {
-            $totalEgresos = (float) Movimiento::whereDate('fecha', $hoy)
-                ->where('tipo', Movimiento::TIPO_EGRESO)
-                ->sum('monto');
-
-            $totalIngresos = (float) Movimiento::whereDate('fecha', $hoy)
-                ->where('tipo', Movimiento::TIPO_INGRESO)
-                ->sum('monto');
+            // Pesos y dólares por separado
+            $totales = Movimiento::totalsForDate($hoy->toDateString());
+            $totalEgresos = $totales['egresos'];
+            $totalIngresos = $totales['ingresos'];
 
             $ultimosEgresos = Movimiento::with(['concepto', 'medioDePago'])
                 ->where('tipo', Movimiento::TIPO_EGRESO)
@@ -76,6 +73,11 @@ class DashboardController extends Controller
             $stats['totalEgresos'] = $totalEgresos;
             $stats['totalIngresos'] = $totalIngresos;
             $stats['balanceDelDia'] = $totalIngresos - $totalEgresos;
+
+            $totalesUsd = Movimiento::totalsUsdForDate($hoy->toDateString());
+            $stats['ingresosUsd'] = $totalesUsd['ingresos'];
+            $stats['egresosUsd'] = $totalesUsd['egresos'];
+            $stats['balanceUsd'] = $totalesUsd['ingresos'] - $totalesUsd['egresos'];
         }
 
         return Inertia::render('Administrador/inicio', [

@@ -181,14 +181,23 @@
     <div class="card">
         <div class="label">Ingresos</div>
         <div class="value">$ {{ number_format($kpis['ingresos'], 2, ',', '.') }}</div>
+        @if(($kpisUsd['ingresos'] ?? 0) != 0)
+            <div class="value">US$ {{ number_format($kpisUsd['ingresos'], 2, ',', '.') }}</div>
+        @endif
     </div>
     <div class="card">
         <div class="label">Egresos</div>
         <div class="value">$ {{ number_format($kpis['egresos'], 2, ',', '.') }}</div>
+        @if(($kpisUsd['egresos'] ?? 0) != 0)
+            <div class="value">US$ {{ number_format($kpisUsd['egresos'], 2, ',', '.') }}</div>
+        @endif
     </div>
     <div class="card">
         <div class="label">Neto</div>
         <div class="value">$ {{ number_format($kpis['neto'], 2, ',', '.') }}</div>
+        @if(($kpisUsd['neto'] ?? 0) != 0)
+            <div class="value">US$ {{ number_format($kpisUsd['neto'], 2, ',', '.') }}</div>
+        @endif
     </div>
 </div>
 
@@ -207,8 +216,14 @@
         <tr>
             <td>{{ $row->medio }}</td>
             <td class="center">{{ $row->cantidad }}</td>
-            <td class="num">$ {{ number_format($row->total, 2, ',', '.') }}</td>
-            <td class="num">{{ number_format($row->porcentaje, 2, ',', '.') }}%</td>
+            <td class="num">
+                @if($row->total_usd !== null)
+                    US$ {{ number_format($row->total_usd, 2, ',', '.') }}
+                @else
+                    $ {{ number_format($row->total, 2, ',', '.') }}
+                @endif
+            </td>
+            <td class="num">{{ $row->porcentaje !== null ? number_format($row->porcentaje, 2, ',', '.') . '%' : '—' }}</td>
         </tr>
     @endforeach
     </tbody>
@@ -229,8 +244,14 @@
         <tr>
             <td>{{ $row->medio }}</td>
             <td class="center">{{ $row->cantidad }}</td>
-            <td class="num">$ {{ number_format($row->total, 2, ',', '.') }}</td>
-            <td class="num">{{ number_format($row->porcentaje, 2, ',', '.') }}%</td>
+            <td class="num">
+                @if($row->total_usd !== null)
+                    US$ {{ number_format($row->total_usd, 2, ',', '.') }}
+                @else
+                    $ {{ number_format($row->total, 2, ',', '.') }}
+                @endif
+            </td>
+            <td class="num">{{ $row->porcentaje !== null ? number_format($row->porcentaje, 2, ',', '.') . '%' : '—' }}</td>
         </tr>
     @endforeach
     </tbody>

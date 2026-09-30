@@ -1,29 +1,34 @@
 import DashboardLayout from '@/layouts/DashboardLayout';
 import { PageProps as InertiaPageProps } from '@inertiajs/core';
 import { Head, router, usePage } from '@inertiajs/react';
+import { TotalDolares, TotalSeparado } from '@/components/ui/MontoConDolares';
 import React from 'react';
 
 interface MedioPagoRow {
     medio_de_pago_id: number;
     medio: string;
+    moneda: string;
     total: number;
+    total_usd: number | null;
     cantidad: number;
-    porcentaje: number;
+    porcentaje: number | null; // null en filas en dólares (el % es sobre pesos)
 }
+
+type Totales = { ingresos: number; egresos: number; neto: number };
 
 interface PageProps extends InertiaPageProps {
     fecha: string;
-    kpis: {
-        ingresos: number;
-        egresos: number;
-        neto: number;
-    };
+    kpis: Totales;
+    kpisUsd: Totales;
     ingresosPorMedio: MedioPagoRow[];
     egresosPorMedio: MedioPagoRow[];
 }
 
 export default function Index() {
-    const { fecha, kpis, ingresosPorMedio, egresosPorMedio } = usePage<PageProps>().props;
+    const { fecha, kpis, kpisUsd, ingresosPorMedio, egresosPorMedio } = usePage<PageProps>().props;
+
+    // Los dólares van aparte: los KPIs en pesos no los incluyen
+    const detalleUsd = (valor: number) => <TotalDolares valor={valor} className="mt-1 text-2xl text-emerald-700" />;
 
     /* ======================
      * Helpers
@@ -90,6 +95,7 @@ export default function Index() {
                             </div>
                         </div>
                         <p className="text-3xl font-bold text-gray-900">{formatCurrency(kpis.ingresos)}</p>
+                        {detalleUsd(kpisUsd.ingresos)}
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-green-500" />
                     </div>
 
@@ -103,6 +109,7 @@ export default function Index() {
                             </div>
                         </div>
                         <p className="text-3xl font-bold text-gray-900">{formatCurrency(kpis.egresos)}</p>
+                        {detalleUsd(kpisUsd.egresos)}
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-red-500" />
                     </div>
 
@@ -121,6 +128,7 @@ export default function Index() {
                             </div>
                         </div>
                         <p className="text-3xl font-bold text-gray-900">{formatCurrency(kpis.neto)}</p>
+                        {detalleUsd(kpisUsd.neto)}
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-[#1d6bff]" />
                     </div>
                 </div>
@@ -144,16 +152,25 @@ export default function Index() {
                                                 <p className="mt-1 text-sm text-gray-500">{row.cantidad} mov.</p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="font-semibold text-gray-900">{formatCurrency(row.total)}</p>
-                                                <p className="mt-1 text-sm font-semibold text-gray-500">{row.porcentaje.toFixed(0)}%</p>
+                                                <TotalSeparado
+                                                    pesos={row.total}
+                                                    usd={row.total_usd}
+                                                    formatMonto={formatCurrency}
+                                                    className="font-semibold text-gray-900"
+                                                />
+                                                {row.porcentaje !== null && (
+                                                    <p className="mt-1 text-sm font-semibold text-gray-500">{row.porcentaje.toFixed(0)}%</p>
+                                                )}
                                             </div>
                                         </div>
-                                        <div className="mt-3 h-2 w-full rounded-full bg-gray-100">
-                                            <div
-                                                className="h-2 rounded-full bg-green-500"
-                                                style={{ width: `${Math.max(0, Math.min(100, row.porcentaje))}%` }}
-                                            />
-                                        </div>
+                                        {row.porcentaje !== null && (
+                                            <div className="mt-3 h-2 w-full rounded-full bg-gray-100">
+                                                <div
+                                                    className="h-2 rounded-full bg-green-500"
+                                                    style={{ width: `${Math.max(0, Math.min(100, row.porcentaje))}%` }}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -178,16 +195,25 @@ export default function Index() {
                                                 <p className="mt-1 text-sm text-gray-500">{row.cantidad} mov.</p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="font-semibold text-gray-900">{formatCurrency(row.total)}</p>
-                                                <p className="mt-1 text-sm font-semibold text-gray-500">{row.porcentaje.toFixed(0)}%</p>
+                                                <TotalSeparado
+                                                    pesos={row.total}
+                                                    usd={row.total_usd}
+                                                    formatMonto={formatCurrency}
+                                                    className="font-semibold text-gray-900"
+                                                />
+                                                {row.porcentaje !== null && (
+                                                    <p className="mt-1 text-sm font-semibold text-gray-500">{row.porcentaje.toFixed(0)}%</p>
+                                                )}
                                             </div>
                                         </div>
-                                        <div className="mt-3 h-2 w-full rounded-full bg-gray-100">
-                                            <div
-                                                className="h-2 rounded-full bg-red-500"
-                                                style={{ width: `${Math.max(0, Math.min(100, row.porcentaje))}%` }}
-                                            />
-                                        </div>
+                                        {row.porcentaje !== null && (
+                                            <div className="mt-3 h-2 w-full rounded-full bg-gray-100">
+                                                <div
+                                                    className="h-2 rounded-full bg-red-500"
+                                                    style={{ width: `${Math.max(0, Math.min(100, row.porcentaje))}%` }}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>

@@ -2,6 +2,7 @@ import { Head, Link } from '@inertiajs/react';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import { Movimiento } from '@/types/movimiento';
 import ViewButton from '@/components/botones/boton-ver';
+import MontoConDolares from '@/components/ui/MontoConDolares';
 import { FileText } from 'lucide-react';
 import { formatDateTimeToArgentina } from '@/utils/dateFormat';
 
@@ -47,10 +48,13 @@ console.log('Movimiento completo:', movimiento);
                     <div>
                         <p className="text-sm text-gray-600 font-semibold mb-2">Monto</p>
                         <p className={`text-2xl font-bold ${tipoMovimiento === 'ingreso' ? 'text-green-600' : 'text-red-600'}`}>
-                            ${Number(movimiento.monto).toLocaleString('es-AR', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2
-                            })}
+                            <MontoConDolares
+                                monto={movimiento.monto}
+                                montoUsd={movimiento.monto_usd}
+                                tipoCambio={movimiento.tipo_cambio}
+                                align="left"
+                                detalleClassName="text-sm font-medium text-gray-500"
+                            />
                         </p>
                     </div>
 

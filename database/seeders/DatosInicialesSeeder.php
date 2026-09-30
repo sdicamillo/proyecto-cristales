@@ -44,12 +44,13 @@ class DatosInicialesSeeder extends Seeder
 
         // ---- Tabla medio_de_pago ----
         DB::table('medio_de_pago')->insert([
-            ['nombre' => 'Efectivo'],
-            ['nombre' => 'Crédito'],
-            ['nombre' => 'Débito'],
-            ['nombre' => 'Transferencia'],
-            ['nombre' => 'Cheque'],
-            ['nombre' => 'Voucher de Compañía de Seguros'],
+            ['nombre' => 'Efectivo', 'moneda' => 'ARS'],
+            ['nombre' => 'Crédito', 'moneda' => 'ARS'],
+            ['nombre' => 'Débito', 'moneda' => 'ARS'],
+            ['nombre' => 'Transferencia', 'moneda' => 'ARS'],
+            ['nombre' => 'Cheque', 'moneda' => 'ARS'],
+            ['nombre' => 'Voucher de Compañía de Seguros', 'moneda' => 'ARS'],
+            ['nombre' => 'Efectivo en dólares', 'moneda' => 'USD'],
         ]);
 
         // ---- Tabla estado ----

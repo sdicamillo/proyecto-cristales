@@ -11,12 +11,16 @@ type Pago = {
     observacion: string;
     pagado: boolean;
     bloqueado?: boolean; // NUEVO: Indica si el pago está bloqueado
+    monto_usd?: number | string | null;
+    tipo_cambio?: number | string | null;
 };
+
+type MedioDePago = { id: number; nombre: string; moneda?: string };
 
 type Props = {
     pagos: Pago[];
     setPagos: (pagos: Pago[]) => void;
-    mediosDePago: Array<{ id: number; nombre: string }>;
+    mediosDePago: MedioDePago[];
     totalOrden: number;
     errors?: Record<string, string>;
     modoEdicion?: boolean; // NUEVO: Para saber si estamos editando una OT existente
@@ -39,9 +43,20 @@ export default function PagosSection({
     const saldoPendiente = totalOrden - totalPagado;
     const porcentajePagado = totalOrden > 0 ? (totalPagado / totalOrden) * 100 : 0;
 
+    const esEnDolares = (medioId: number | string) =>
+        mediosDePago.find((mp) => String(mp.id) === String(medioId))?.moneda === 'USD';
+
+    // En pagos en USD el monto en pesos se calcula: monto USD × tipo de cambio
+    const calcularMontoPesos = (montoUsd: unknown, tipoCambio: unknown): number | string => {
+        if (montoUsd === '' || montoUsd == null || tipoCambio === '' || tipoCambio == null) return '';
+        return Math.round(Number(montoUsd) * Number(tipoCambio) * 100) / 100;
+    };
+
     const nuevoPago: Pago = {
         medio_de_pago_id: '',
         monto: '',
+        monto_usd: '',
+        tipo_cambio: '',
         fecha: getArgentinaToday(), 
         observacion: '',
         pagado: false,
@@ -74,7 +89,17 @@ export default function PagosSection({
         }
         
         const nuevosPagos = [...pagos];
-        nuevosPagos[index] = { ...nuevosPagos[index], [campo]: valor };
+        const actualizado: Pago = { ...nuevosPagos[index], [campo]: valor };
+
+        if (esEnDolares(actualizado.medio_de_pago_id)) {
+            actualizado.monto = calcularMontoPesos(actualizado.monto_usd, actualizado.tipo_cambio);
+        } else if (campo === 'medio_de_pago_id') {
+            if (esEnDolares(pago.medio_de_pago_id)) actualizado.monto = '';
+            actualizado.monto_usd = '';
+            actualizado.tipo_cambio = '';
+        }
+
+        nuevosPagos[index] = actualizado;
         setPagos(nuevosPagos);
     };
 
@@ -96,6 +121,14 @@ export default function PagosSection({
             .reduce((acc, p) => acc + Number(p.monto || 0), 0);
         
         const restante = totalOrden - montosAnteriores;
+        const pago = pagos[index];
+
+        if (esEnDolares(pago.medio_de_pago_id)) {
+            const tipoCambio = Number(pago.tipo_cambio);
+            actualizarPago(index, 'monto_usd', restante > 0 ? Math.round((restante / tipoCambio) * 100) / 100 : 0);
+            return;
+        }
+
         actualizarPago(index, 'monto', restante > 0 ? restante : 0);
     };
 
@@ -189,7 +222,10 @@ export default function PagosSection({
                             .slice(0, index)
                             .reduce((acc, p) => acc + Number(p.monto || 0), 0);
                         const restante = totalOrden - montosAnteriores;
-                        const mostrarBoton = restante > 0 && !pago.monto && !pago.bloqueado;
+                        const enDolares = esEnDolares(pago.medio_de_pago_id);
+                        const mostrarBoton = enDolares
+                            ? restante > 0 && !pago.monto_usd && Number(pago.tipo_cambio) > 0 && !pago.bloqueado
+                            : restante > 0 && !pago.monto && !pago.bloqueado;
                         const textoBoton = index === 0 ? 'Total' : 'Restante';
 
                         const esBloqueado = pago.bloqueado === true;
@@ -285,7 +321,7 @@ export default function PagosSection({
                                     {/* Monto con botón Total/Restante */}
                                     <div className="md:col-span-2">
                                         <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                                            Monto * {Number(pago.monto) < 0 && <span className="text-red-600">(Negativo)</span>}
+                                            {enDolares ? 'Equivalente en pesos' : 'Monto *'} {Number(pago.monto) < 0 && <span className="text-red-600">(Negativo)</span>}
                                         </label>
                                         <div className="space-y-2">
                                             {/* Input de monto */}
@@ -298,7 +334,9 @@ export default function PagosSection({
                                                     placeholder="0"
                                                     step="0.01"
                                                     disabled={esBloqueado}
-                                                    className={`w-full pl-7 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition disabled:bg-slate-100 disabled:cursor-not-allowed ${
+                                                    readOnly={enDolares}
+                                                    title={enDolares ? 'Se calcula con el monto en USD y el tipo de cambio' : undefined}
+                                                    className={`w-full pl-7 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition disabled:bg-slate-100 disabled:cursor-not-allowed read-only:bg-slate-50 ${
                                                         Number(pago.monto) < 0 ? 'text-red-600 font-semibold' : ''
                                                     } ${errors[`pagos.${index}.monto`] ? 'border-red-300' : 'border-slate-200'}`}
                                                 />
@@ -313,6 +351,7 @@ export default function PagosSection({
                                                 >
                                                     <Zap className="h-3.5 w-3.5" />
                                                     {textoBoton}: ${restante.toLocaleString('es-AR')}
+                                                    {enDolares && ` (US$ ${(Math.round((restante / Number(pago.tipo_cambio)) * 100) / 100).toLocaleString('es-AR')})`}
                                                 </button>
                                             )}
                                         </div>
@@ -348,6 +387,61 @@ export default function PagosSection({
                                         </button>
                                     </div>
                                 </div>
+
+                                {/* Datos del pago en dólares */}
+                                {enDolares && (
+                                    <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 md:grid-cols-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-600 mb-1.5">Monto en USD *</label>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">US$</span>
+                                                <input
+                                                    type="number"
+                                                    value={pago.monto_usd ?? ''}
+                                                    onChange={(e) => actualizarPago(index, 'monto_usd', e.target.value)}
+                                                    placeholder="0"
+                                                    step="0.01"
+                                                    disabled={esBloqueado}
+                                                    className={`w-full pl-12 pr-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition disabled:bg-slate-100 disabled:cursor-not-allowed ${
+                                                        errors[`pagos.${index}.monto_usd`] ? 'border-red-300' : 'border-slate-200'
+                                                    }`}
+                                                />
+                                            </div>
+                                            {errors[`pagos.${index}.monto_usd`] && (
+                                                <p className="text-xs text-red-500 mt-1">{errors[`pagos.${index}.monto_usd`]}</p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-600 mb-1.5">Tipo de cambio (ARS por USD) *</label>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">$</span>
+                                                <input
+                                                    type="number"
+                                                    value={pago.tipo_cambio ?? ''}
+                                                    onChange={(e) => actualizarPago(index, 'tipo_cambio', e.target.value)}
+                                                    placeholder="0"
+                                                    step="0.01"
+                                                    min="0"
+                                                    disabled={esBloqueado}
+                                                    className={`w-full pl-7 pr-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition disabled:bg-slate-100 disabled:cursor-not-allowed ${
+                                                        errors[`pagos.${index}.tipo_cambio`] ? 'border-red-300' : 'border-slate-200'
+                                                    }`}
+                                                />
+                                            </div>
+                                            {errors[`pagos.${index}.tipo_cambio`] && (
+                                                <p className="text-xs text-red-500 mt-1">{errors[`pagos.${index}.tipo_cambio`]}</p>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col justify-end">
+                                            <p className="text-xs text-slate-600 mb-1.5">Equivalente en pesos</p>
+                                            <p className="py-2 text-lg font-bold text-emerald-700">
+                                                {pago.monto !== '' && pago.monto != null
+                                                    ? `$${Number(pago.monto).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                                    : '—'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         );
                     })

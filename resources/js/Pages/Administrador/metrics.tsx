@@ -1,5 +1,6 @@
 import DashboardLayout from '@/layouts/DashboardLayout';
 import { Head, router } from '@inertiajs/react';
+import { TotalDolares, TotalSeparado } from '@/components/ui/MontoConDolares';
 import React from 'react';
 
 type Money = number;
@@ -14,19 +15,25 @@ interface Kpis {
     egresos: Money;
     neto: Money;
     promedioEgreso: Money;
+    ingresosUsd: Money;
+    egresosUsd: Money;
+    netoUsd: Money;
 }
 
 interface ComposicionRow {
     concepto: string;
     total: Money;
-    porcentaje: number;
+    total_usd: Money | null;
+    porcentaje: number | null; // % sobre pesos; null si el concepto es solo en dólares
 }
 
 interface MedioPagoRow {
     medio: string;
+    moneda: string;
     total: Money;
+    total_usd: Money | null;
     cantidad: number;
-    porcentaje: number;
+    porcentaje: number | null; // % sobre pesos; null en filas en dólares
 }
 
 interface Actividad {
@@ -75,12 +82,14 @@ function ProgressBar({ value, colorClass }: { value: number; colorClass: string 
 function MetricCard({
     title,
     value,
+    valueUsd,
     subtitle,
     accent,
     icon,
 }: {
     title: string;
     value: string;
+    valueUsd?: Money;
     subtitle: string;
     accent: 'green' | 'red' | 'blue';
     icon: React.ReactNode;
@@ -114,6 +123,7 @@ function MetricCard({
                 <div>
                     <p className="text-sm font-semibold text-gray-600">{title}</p>
                     <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+                    <TotalDolares valor={valueUsd} className="mt-1 text-2xl text-emerald-700" />
                 </div>
                 <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${a.iconBg} ${a.iconText}`}>{icon}</div>
             </div>
@@ -212,6 +222,7 @@ export default function Metrics({ range, kpis, composicionEgresos, mediosDePago,
                     <MetricCard
                         title="Ingresos"
                         value={formatCurrency(kpis.ingresos)}
+                        valueUsd={kpis.ingresosUsd}
                         subtitle="Suma de ingresos"
                         accent="green"
                         icon={
@@ -224,6 +235,7 @@ export default function Metrics({ range, kpis, composicionEgresos, mediosDePago,
                     <MetricCard
                         title="Egresos"
                         value={formatCurrency(kpis.egresos)}
+                        valueUsd={kpis.egresosUsd}
                         subtitle="Suma de egresos"
                         accent="red"
                         icon={
@@ -236,6 +248,7 @@ export default function Metrics({ range, kpis, composicionEgresos, mediosDePago,
                     <MetricCard
                         title="Resultado neto"
                         value={formatCurrency(kpis.neto)}
+                        valueUsd={kpis.netoUsd}
                         subtitle="Ingresos - Egresos"
                         accent="blue"
                         icon={
@@ -281,11 +294,18 @@ export default function Metrics({ range, kpis, composicionEgresos, mediosDePago,
                                                 <p className="truncate font-semibold text-gray-900">{row.concepto}</p>
                                             </div>
                                             <div className="flex items-baseline gap-3 whitespace-nowrap">
-                                                <span className="font-semibold text-gray-900">{formatCurrency(row.total)}</span>
-                                                <span className="text-sm font-semibold text-gray-500">{formatPercent(row.porcentaje)}</span>
+                                                <TotalSeparado
+                                                    pesos={row.total}
+                                                    usd={row.total_usd}
+                                                    formatMonto={formatCurrency}
+                                                    className="font-semibold text-gray-900"
+                                                />
+                                                {row.porcentaje !== null && (
+                                                    <span className="text-sm font-semibold text-gray-500">{formatPercent(row.porcentaje)}</span>
+                                                )}
                                             </div>
                                         </div>
-                                        <ProgressBar value={row.porcentaje} colorClass="bg-red-500" />
+                                        {row.porcentaje !== null && <ProgressBar value={row.porcentaje} colorClass="bg-red-500" />}
                                     </div>
                                 ))}
                             </div>
@@ -309,11 +329,18 @@ export default function Metrics({ range, kpis, composicionEgresos, mediosDePago,
                                                 <p className="text-sm text-gray-500">{row.cantidad} mov.</p>
                                             </div>
                                             <div className="flex items-baseline gap-3 whitespace-nowrap">
-                                                <span className="font-semibold text-gray-900">{formatCurrency(row.total)}</span>
-                                                <span className="text-sm font-semibold text-gray-500">{formatPercent(row.porcentaje)}</span>
+                                                <TotalSeparado
+                                                    pesos={row.total}
+                                                    usd={row.total_usd}
+                                                    formatMonto={formatCurrency}
+                                                    className="font-semibold text-gray-900"
+                                                />
+                                                {row.porcentaje !== null && (
+                                                    <span className="text-sm font-semibold text-gray-500">{formatPercent(row.porcentaje)}</span>
+                                                )}
                                             </div>
                                         </div>
-                                        <ProgressBar value={row.porcentaje} colorClass="bg-[#1d6bff]" />
+                                        {row.porcentaje !== null && <ProgressBar value={row.porcentaje} colorClass="bg-[#1d6bff]" />}
                                     </div>
                                 ))}
                             </div>

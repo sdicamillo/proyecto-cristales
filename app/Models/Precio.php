@@ -16,6 +16,8 @@ class Precio extends Model
         'orden_de_trabajo_id',
         'medio_de_pago_id',
         'valor',
+        'monto_usd',
+        'tipo_cambio',
         'fecha',
         'pagado',
         'bloqueado',
@@ -26,6 +28,8 @@ class Precio extends Model
     protected $casts = [
         'fecha' => 'date',
         'valor' => 'decimal:2',
+        'monto_usd' => 'decimal:2',
+        'tipo_cambio' => 'decimal:2',
         'pagado' => 'boolean',
         'bloqueado' => 'boolean',
         'movimiento_registrado' => 'boolean', // NUEVO

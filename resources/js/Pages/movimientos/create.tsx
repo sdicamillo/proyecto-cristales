@@ -6,6 +6,7 @@ import { Concepto, MedioDePago, MovimientoFormData } from '@/types/movimiento';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import DeleteButton from '@/components/botones/boton-eliminar';
 import DateTimePicker from '@/components/ui/DateTimePicker';
+import CamposDolares, { calcularMontoPesos } from '@/components/ui/CamposDolares';
 import { ordenarPorEtiqueta } from '@/lib/utils';
 
 interface Props {
@@ -50,11 +51,34 @@ export default function Create({ conceptos, mediosDePago, tipo, label }: Props) 
     const { data, setData, post, processing, errors } = useForm<MovimientoFormData>({
         fecha: getFechaArgentina(),
         monto: '',
+        monto_usd: '',
+        tipo_cambio: '',
         concepto_id: '',
         medio_de_pago_id: '',
         comprobantes: [] as File[],
 
     });
+
+    const esEnDolares = (medioId: string | number) =>
+        mediosDePago.find((m) => String(m.id) === String(medioId))?.moneda === 'USD';
+    const enDolares = esEnDolares(data.medio_de_pago_id);
+
+    const cambiarMedio = (medioId: string) => {
+        setData((prev) => ({
+            ...prev,
+            medio_de_pago_id: medioId,
+            monto: esEnDolares(prev.medio_de_pago_id) !== esEnDolares(medioId) ? '' : prev.monto,
+            monto_usd: '',
+            tipo_cambio: '',
+        }));
+    };
+
+    const cambiarDolares = (campo: 'monto_usd' | 'tipo_cambio', valor: string) => {
+        setData((prev) => {
+            const next = { ...prev, [campo]: valor };
+            return { ...next, monto: calcularMontoPesos(next.monto_usd, next.tipo_cambio) };
+        });
+    };
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
@@ -113,7 +137,7 @@ export default function Create({ conceptos, mediosDePago, tipo, label }: Props) 
                         {/* Monto */}
                         <div>
                             <label htmlFor="monto" className="block text-sm font-semibold text-gray-800 mb-2">
-                                Monto *
+                                {enDolares ? 'Monto en pesos (se calcula con el monto en USD)' : 'Monto *'}
                             </label>
                             <div className="relative">
                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-700 font-bold text-lg">$</span>
@@ -123,6 +147,7 @@ export default function Create({ conceptos, mediosDePago, tipo, label }: Props) 
                                     step="0.01"
                                     placeholder="0.00"
                                     value={data.monto}
+                                    readOnly={enDolares}
                                     onChange={(e) => setData('monto', e.target.value)}
                                     className={`w-full pl-10 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:ring-2 ${current.ring500} ${current.border500} focus:bg-white outline-none transition text-gray-900 font-semibold text-lg ${errors.monto ? 'border-red-500 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                                         }`}
@@ -176,7 +201,7 @@ export default function Create({ conceptos, mediosDePago, tipo, label }: Props) 
                                 <select
                                     id="medio_de_pago_id"
                                     value={data.medio_de_pago_id}
-                                    onChange={(e) => setData('medio_de_pago_id', e.target.value)}
+                                    onChange={(e) => cambiarMedio(e.target.value)}
                                     className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-xl focus:ring-2 ${current.ring500} ${current.border500} focus:bg-white outline-none transition text-gray-900 font-medium ${errors.medio_de_pago_id ? 'border-red-500 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                                         }`}
                                 >
@@ -197,6 +222,17 @@ export default function Create({ conceptos, mediosDePago, tipo, label }: Props) 
                                 )}
                             </div>
                         </div>
+
+                        {enDolares && (
+                            <CamposDolares
+                                montoUsd={data.monto_usd}
+                                tipoCambio={data.tipo_cambio}
+                                monto={data.monto}
+                                onChange={cambiarDolares}
+                                errors={{ monto_usd: errors.monto_usd, tipo_cambio: errors.tipo_cambio }}
+                                focusClasses={`${current.ring500} ${current.border500}`}
+                            />
+                        )}
 
                         {/* Comprobantes */}
                         <div>

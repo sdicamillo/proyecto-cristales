@@ -16,7 +16,7 @@ import { ordenarPorEtiqueta } from '@/lib/utils';
 import ResponsablesSection, { type Responsable } from '@/components/ui/ResponsablesSection';
 
 type Estado = { id: number; nombre: string };
-type MedioDePago = { id: number; nombre: string };
+type MedioDePago = { id: number; nombre: string; moneda?: string };
 type CatalogItem = { id: number; nombre: string };
 
 type OrdenDetalleServer = {
@@ -34,6 +34,8 @@ type OrdenPagoServer = {
   id: number;
   medio_de_pago_id: number;
   valor: number | string;
+  monto_usd: number | string | null;
+  tipo_cambio: number | string | null;
   fecha: string;
   pagado: boolean;
   bloqueado: boolean;
@@ -82,6 +84,8 @@ type FormData = {
     pagado: boolean;
     bloqueado?: boolean;
     observacion: string;
+    monto_usd?: number | string | null;
+    tipo_cambio?: number | string | null;
   }>;
 };
 
@@ -162,6 +166,8 @@ export default function Edit({
       pagado: p.pagado ?? false,
       bloqueado: p.bloqueado ?? false,
       observacion: p.observacion ?? "",
+      monto_usd: p.monto_usd ?? "",
+      tipo_cambio: p.tipo_cambio ?? "",
     })),
   };
 

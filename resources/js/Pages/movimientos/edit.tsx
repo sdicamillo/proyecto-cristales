@@ -6,7 +6,19 @@ import DeleteButton from '@/components/botones/boton-eliminar';
 import { View } from 'lucide-react';
 import ViewButton from '@/components/botones/boton-ver';
 import DateTimePicker from '@/components/ui/DateTimePicker';
+import CamposDolares, { calcularMontoPesos } from '@/components/ui/CamposDolares';
 import { ordenarPorEtiqueta } from '@/lib/utils';
+
+type EditFormData = {
+    fecha: string;
+    monto: number | string;
+    monto_usd: number | string;
+    tipo_cambio: number | string;
+    concepto_id: number | string;
+    medio_de_pago_id: number | string | null;
+    comprobantes: File[];
+    comprobantes_a_eliminar: number[];
+};
 
 interface Props {
     movimiento: Movimiento;
@@ -19,14 +31,37 @@ interface Props {
 export default function Edit({ movimiento, conceptos, mediosDePago, tipo, label }: Props) {
     const tipoPlural = tipo.endsWith("s") ? tipo : `${tipo}s`;
 
-    const { data, setData, processing, errors, post } = useForm({
+    const { data, setData, processing, errors, post } = useForm<EditFormData>({
         fecha: movimiento.fecha ? String(movimiento.fecha).replace('T', ' ').substring(0, 16) : '',
         monto: movimiento.monto,
+        monto_usd: movimiento.monto_usd ?? '',
+        tipo_cambio: movimiento.tipo_cambio ?? '',
         concepto_id: movimiento.concepto_id,
         medio_de_pago_id: movimiento.medio_de_pago_id,
         comprobantes: [] as File[],
         comprobantes_a_eliminar: [] as number[],
     });
+
+    const esEnDolares = (medioId: string | number | null) =>
+        mediosDePago.find((m) => String(m.id) === String(medioId))?.moneda === 'USD';
+    const enDolares = esEnDolares(data.medio_de_pago_id);
+
+    const cambiarMedio = (medioId: string) => {
+        setData((prev) => ({
+            ...prev,
+            medio_de_pago_id: medioId,
+            monto: esEnDolares(prev.medio_de_pago_id) !== esEnDolares(medioId) ? '' : prev.monto,
+            monto_usd: '',
+            tipo_cambio: '',
+        }));
+    };
+
+    const cambiarDolares = (campo: 'monto_usd' | 'tipo_cambio', valor: string) => {
+        setData((prev) => {
+            const next = { ...prev, [campo]: valor };
+            return { ...next, monto: calcularMontoPesos(next.monto_usd, next.tipo_cambio) };
+        });
+    };
 
 
     const submit: FormEventHandler = (e) => {
@@ -86,7 +121,7 @@ export default function Edit({ movimiento, conceptos, mediosDePago, tipo, label 
                         {/* Monto */}
                         <div>
                             <label className="block text-sm font-semibold text-gray-800 mb-2">
-                                Monto *
+                                {enDolares ? 'Monto en pesos (se calcula con el monto en USD)' : 'Monto *'}
                             </label>
                             <div className="relative">
                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-700 font-bold text-lg">$</span>
@@ -94,6 +129,7 @@ export default function Edit({ movimiento, conceptos, mediosDePago, tipo, label 
                                     type="number"
                                     step="0.01"
                                     value={data.monto}
+                                    readOnly={enDolares}
                                     onChange={(e) => setData("monto", e.target.value)}
                                     className={`w-full pl-10 pr-4 py-3 bg-gray-50 border-2 rounded-xl text-lg font-semibold text-gray-900 outline-none transition ${errors.monto ? "border-red-500 bg-red-50" : "border-gray-200 hover:border-gray-300"
                                         }`}
@@ -130,7 +166,7 @@ export default function Edit({ movimiento, conceptos, mediosDePago, tipo, label 
                                 </label>
                                 <select
                                     value={data.medio_de_pago_id ?? ""}
-                                    onChange={(e) => setData("medio_de_pago_id", e.target.value)}
+                                    onChange={(e) => cambiarMedio(e.target.value)}
                                     className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-xl outline-none text-gray-900 transition ${errors.medio_de_pago_id ? "border-red-500 bg-red-50" : "border-gray-200 hover:border-gray-300"
                                         }`}
                                 >
@@ -144,6 +180,16 @@ export default function Edit({ movimiento, conceptos, mediosDePago, tipo, label 
                                 {errors.medio_de_pago_id && <p className="mt-2 text-sm text-red-600">{errors.medio_de_pago_id}</p>}
                             </div>
                         </div>
+
+                        {enDolares && (
+                            <CamposDolares
+                                montoUsd={data.monto_usd}
+                                tipoCambio={data.tipo_cambio}
+                                monto={data.monto}
+                                onChange={cambiarDolares}
+                                errors={{ monto_usd: errors.monto_usd, tipo_cambio: errors.tipo_cambio }}
+                            />
+                        )}
 
                         {/* Comprobantes existentes */}
                         {/* Comprobantes existentes (los que ya estaban en la BD) */}

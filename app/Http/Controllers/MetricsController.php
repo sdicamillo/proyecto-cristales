@@ -54,8 +54,9 @@ class MetricsController extends Controller
     {
         $row = Movimiento::query()
             ->selectRaw(
-                "COALESCE(SUM(CASE WHEN tipo = ? THEN monto ELSE 0 END), 0) as ingresos,\n                 COALESCE(SUM(CASE WHEN tipo = ? THEN monto ELSE 0 END), 0) as egresos,\n                 COALESCE(SUM(CASE WHEN tipo = ? THEN 1 ELSE 0 END), 0) as egresos_count",
-                [Movimiento::TIPO_INGRESO, Movimiento::TIPO_EGRESO, Movimiento::TIPO_EGRESO]
+                // Pesos y dólares por separado: los movimientos en USD no suman a los pesos
+                "COALESCE(SUM(CASE WHEN tipo = ? AND monto_usd IS NULL THEN monto ELSE 0 END), 0) as ingresos,\n                 COALESCE(SUM(CASE WHEN tipo = ? AND monto_usd IS NULL THEN monto ELSE 0 END), 0) as egresos,\n                 COALESCE(SUM(CASE WHEN tipo = ? AND monto_usd IS NULL THEN 1 ELSE 0 END), 0) as egresos_count,\n                 COALESCE(SUM(CASE WHEN tipo = ? THEN monto_usd ELSE 0 END), 0) as ingresos_usd,\n                 COALESCE(SUM(CASE WHEN tipo = ? THEN monto_usd ELSE 0 END), 0) as egresos_usd",
+                [Movimiento::TIPO_INGRESO, Movimiento::TIPO_EGRESO, Movimiento::TIPO_EGRESO, Movimiento::TIPO_INGRESO, Movimiento::TIPO_EGRESO]
             )
             ->whereBetween('fecha', [$from, $to])
             ->first();
@@ -65,26 +66,33 @@ class MetricsController extends Controller
         $egresosCount = (int) ($row->egresos_count ?? 0);
         $neto = $ingresos - $egresos;
         $promedioEgreso = $egresosCount > 0 ? $egresos / $egresosCount : 0.0;
+        $ingresosUsd = (float) ($row->ingresos_usd ?? 0);
+        $egresosUsd = (float) ($row->egresos_usd ?? 0);
 
         return [
             'ingresos' => $ingresos,
             'egresos' => $egresos,
             'neto' => $neto,
             'promedioEgreso' => $promedioEgreso,
+            'ingresosUsd' => $ingresosUsd,
+            'egresosUsd' => $egresosUsd,
+            'netoUsd' => $ingresosUsd - $egresosUsd,
         ];
     }
 
     private function composicionEgresosForRange(string $from, string $to): array
     {
+        // Pesos y dólares por separado: el % es sobre el total en pesos
         $totalEgresos = (float) Movimiento::query()
             ->whereBetween('fecha', [$from, $to])
             ->where('tipo', Movimiento::TIPO_EGRESO)
+            ->whereNull('monto_usd')
             ->sum('monto');
 
         $rows = DB::table('movimiento as m')
             ->leftJoin('concepto as c', 'c.id', '=', 'm.concepto_id')
             ->selectRaw(
-                "m.concepto_id as concepto_id,\n                 COALESCE(c.nombre, 'Sin concepto') as concepto,\n                 COALESCE(SUM(m.monto), 0) as total"
+                "m.concepto_id as concepto_id,\n                 COALESCE(c.nombre, 'Sin concepto') as concepto,\n                 COALESCE(SUM(CASE WHEN m.monto_usd IS NULL THEN m.monto ELSE 0 END), 0) as total,\n                 SUM(m.monto_usd) as total_usd"
             )
             ->whereBetween('m.fecha', [$from, $to])
             ->where('m.tipo', Movimiento::TIPO_EGRESO)
@@ -95,10 +103,15 @@ class MetricsController extends Controller
         return collect($rows)
             ->map(function ($r) use ($totalEgresos) {
                 $total = (float) $r->total;
+                $totalUsd = $r->total_usd !== null ? (float) $r->total_usd : null;
                 return [
                     'concepto' => (string) $r->concepto,
                     'total' => $total,
-                    'porcentaje' => $totalEgresos > 0 ? round(($total / $totalEgresos) * 100, 2) : 0.0,
+                    'total_usd' => $totalUsd,
+                    // Un concepto solo en dólares no tiene porcentaje en pesos
+                    'porcentaje' => $total == 0 && $totalUsd !== null
+                        ? null
+                        : ($totalEgresos > 0 ? round(($total / $totalEgresos) * 100, 2) : 0.0),
                 ];
             })
             ->values()
@@ -107,30 +120,37 @@ class MetricsController extends Controller
 
     private function mediosDePagoForRange(string $from, string $to): array
     {
+        // Pesos y dólares por separado: el % es sobre el total en pesos
         $totalMovimientos = (float) Movimiento::query()
             ->whereBetween('fecha', [$from, $to])
+            ->whereNull('monto_usd')
             ->sum('monto');
 
         $rows = DB::table('movimiento as m')
             ->leftJoin('medio_de_pago as mp', 'mp.id', '=', 'm.medio_de_pago_id')
             ->selectRaw(
-                "COALESCE(m.medio_de_pago_id, 0) as medio_de_pago_id,\n                 COALESCE(mp.nombre, 'Sin medio') as medio,\n                 COALESCE(SUM(m.monto), 0) as total,\n                 COUNT(*) as cantidad"
+                "COALESCE(m.medio_de_pago_id, 0) as medio_de_pago_id,\n                 COALESCE(mp.nombre, 'Sin medio') as medio,\n                 COALESCE(mp.moneda, 'ARS') as moneda,\n                 COALESCE(SUM(CASE WHEN m.monto_usd IS NULL THEN m.monto ELSE 0 END), 0) as total,\n                 SUM(m.monto_usd) as total_usd,\n                 COUNT(*) as cantidad"
             )
             ->whereBetween('m.fecha', [$from, $to])
-            ->groupBy('m.medio_de_pago_id', 'mp.nombre')
+            ->groupBy('m.medio_de_pago_id', 'mp.nombre', 'mp.moneda')
             ->orderByDesc('total')
             ->get();
 
         return collect($rows)
             ->map(function ($r) use ($totalMovimientos) {
                 $total = (float) $r->total;
+                $totalUsd = $r->total_usd !== null ? (float) $r->total_usd : null;
                 $cantidad = (int) $r->cantidad;
 
                 return [
                     'medio' => (string) $r->medio,
+                    'moneda' => (string) $r->moneda,
                     'total' => $total,
+                    'total_usd' => $totalUsd,
                     'cantidad' => $cantidad,
-                    'porcentaje' => $totalMovimientos > 0 ? round(($total / $totalMovimientos) * 100, 2) : 0.0,
+                    'porcentaje' => $totalUsd !== null
+                        ? null
+                        : ($totalMovimientos > 0 ? round(($total / $totalMovimientos) * 100, 2) : 0.0),
                 ];
             })
             ->values()

@@ -1,10 +1,13 @@
 import DashboardLayout from '@/layouts/DashboardLayout';
 import { PERMISSIONS, useAuthorization } from '@/lib/permissions';
 import { Head, Link, usePage } from '@inertiajs/react';
+import MontoConDolares, { TotalDolares } from '@/components/ui/MontoConDolares';
 
 interface Movimiento {
     id: number;
     monto: number;
+    monto_usd?: number | null;
+    tipo_cambio?: number | null;
     created_at: string;
     concepto?: { nombre: string };
     medioDePago?: { nombre: string };
@@ -29,6 +32,9 @@ interface DashboardStats {
     totalIngresos: number | null;
     totalOrdenes: number;
     balanceDelDia: number | null;
+    ingresosUsd?: number;
+    egresosUsd?: number;
+    balanceUsd?: number;
 }
 
 interface Props {
@@ -50,6 +56,11 @@ export default function AdminDashboard({ stats, ultimosEgresos, ultimosIngresos,
             style: 'currency',
             currency: 'ARS',
         }).format(amount);
+
+    // Los dólares van aparte: los totales en pesos no los incluyen
+    const detalleUsd = (valor: number | undefined, className: string) => (
+        <TotalDolares valor={valor} className={`text-2xl ${className}`} />
+    );
 
     const formatTimeAgo = (dateString: string) => {
         const date = new Date(dateString);
@@ -87,6 +98,7 @@ export default function AdminDashboard({ stats, ultimosEgresos, ultimosIngresos,
                         >
                             <h3 className="text-sm font-semibold opacity-90">Balance del Día</h3>
                             <p className="mt-4 text-3xl font-bold">{formatMoney(stats.balanceDelDia)}</p>
+                            {detalleUsd(stats.balanceUsd, 'opacity-90')}
                             <p className="text-sm opacity-80">Ingresos - Egresos</p>
                         </div>
                     )}
@@ -95,6 +107,7 @@ export default function AdminDashboard({ stats, ultimosEgresos, ultimosIngresos,
                         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg">
                             <h3 className="text-sm font-semibold text-gray-600">Ingresos del Día</h3>
                             <p className="mt-4 text-3xl font-bold text-green-600">{formatMoney(stats.totalIngresos)}</p>
+                            {detalleUsd(stats.ingresosUsd, 'text-emerald-700')}
                             <Link href="/ingresos" className="text-sm font-medium text-green-600 hover:text-green-700">
                                 Ver detalles
                             </Link>
@@ -105,6 +118,7 @@ export default function AdminDashboard({ stats, ultimosEgresos, ultimosIngresos,
                         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg">
                             <h3 className="text-sm font-semibold text-gray-600">Egresos del Día</h3>
                             <p className="mt-4 text-3xl font-bold text-red-600">{formatMoney(stats.totalEgresos)}</p>
+                            {detalleUsd(stats.egresosUsd, 'text-emerald-700')}
                             <Link href="/egresos" className="text-sm font-medium text-red-600 hover:text-red-700">
                                 Ver detalles
                             </Link>
@@ -136,7 +150,14 @@ export default function AdminDashboard({ stats, ultimosEgresos, ultimosIngresos,
                                             <p className="font-semibold text-gray-900">{ingreso.concepto?.nombre || 'Sin concepto'}</p>
                                             <p className="text-sm text-gray-500">{formatTimeAgo(ingreso.created_at)}</p>
                                         </div>
-                                        <span className="ml-4 font-bold text-green-600">{formatMoney(ingreso.monto)}</span>
+                                        <span className="ml-4 font-bold text-green-600">
+                                            <MontoConDolares
+                                                monto={ingreso.monto}
+                                                montoUsd={ingreso.monto_usd}
+                                                tipoCambio={ingreso.tipo_cambio}
+                                                formatMonto={formatMoney}
+                                            />
+                                        </span>
                                     </div>
                                 ))}
                             </div>
@@ -156,7 +177,14 @@ export default function AdminDashboard({ stats, ultimosEgresos, ultimosIngresos,
                                             <p className="font-semibold text-gray-900">{egreso.concepto?.nombre || 'Sin concepto'}</p>
                                             <p className="text-sm text-gray-500">{formatTimeAgo(egreso.created_at)}</p>
                                         </div>
-                                        <span className="ml-4 font-bold text-red-600">{formatMoney(egreso.monto)}</span>
+                                        <span className="ml-4 font-bold text-red-600">
+                                            <MontoConDolares
+                                                monto={egreso.monto}
+                                                montoUsd={egreso.monto_usd}
+                                                tipoCambio={egreso.tipo_cambio}
+                                                formatMonto={formatMoney}
+                                            />
+                                        </span>
                                     </div>
                                 ))}
                             </div>

@@ -1,5 +1,6 @@
 import ConfirmAnularModal from '@/components/ConfirmAnularModal';
 import PrintableODT from '@/components/print/PrintableODT';
+import MontoConDolares from '@/components/ui/MontoConDolares';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import { PERMISSIONS, useAuthorization } from '@/lib/permissions';
 import { formatDateTimeToArgentina, formatDateToArgentina } from '@/utils/dateFormat';
@@ -38,6 +39,8 @@ type Detalle = {
 type Pago = {
     id: number;
     valor: number | null;
+    monto_usd: number | string | null;
+    tipo_cambio: number | string | null;
     observacion: string | null;
     fecha: string;
     pagado: boolean;
@@ -332,9 +335,17 @@ export default function Show({
                                                         <p className="text-sm text-gray-500">{formatDateTimeToArgentina(pago.fecha)}</p>
                                                         {pago.observacion && <p className="text-sm text-gray-500">{pago.observacion}</p>}
                                                     </div>
-                                                    <span className="font-bold text-gray-900">
-                                                        {pago.valor !== null ? formatMoney(Math.abs(Number(pago.valor))) : 'Oculto'}
-                                                    </span>
+                                                    {pago.valor !== null ? (
+                                                        <MontoConDolares
+                                                            monto={Math.abs(Number(pago.valor))}
+                                                            montoUsd={pago.monto_usd !== null ? Math.abs(Number(pago.monto_usd)) : null}
+                                                            tipoCambio={pago.tipo_cambio}
+                                                            formatMonto={formatMoney}
+                                                            className="font-bold text-gray-900"
+                                                        />
+                                                    ) : (
+                                                        <span className="font-bold text-gray-900">Oculto</span>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>

@@ -19,6 +19,8 @@ interface Detalle {
 interface Pago {
     id: number;
     valor: number;
+    monto_usd?: number | string | null;
+    tipo_cambio?: number | string | null;
     observacion: string | null;
     medio_de_pago: { nombre: string };
 }
@@ -211,7 +213,12 @@ export default function PrintableODT({ orden }: Props) {
                         <div>
                             {orden.pagos.map((pago) => (
                                 <div key={pago.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9pt', marginBottom: '3px' }}>
-                                    <span>{pago.medio_de_pago.nombre}</span>
+                                    <span>
+                                        {pago.medio_de_pago.nombre}
+                                        {pago.monto_usd != null && pago.tipo_cambio != null && (
+                                            <> (US$ {formatCurrency(Number(pago.monto_usd))} × TC ${formatCurrency(Number(pago.tipo_cambio))})</>
+                                        )}
+                                    </span>
                                     <span style={{ fontWeight: 600 }}>${formatCurrency(Number(pago.valor))}</span>
                                 </div>
                             ))}

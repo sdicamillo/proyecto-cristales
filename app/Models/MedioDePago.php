@@ -9,11 +9,20 @@ class MedioDePago extends Model
 {
     use HasFactory;
     
+    public const MONEDA_ARS = 'ARS';
+    public const MONEDA_USD = 'USD';
+
     protected $table = 'medio_de_pago';
     
     protected $fillable = [
-        'nombre'
+        'nombre',
+        'moneda',
     ];
+
+    public function esEnDolares(): bool
+    {
+        return $this->moneda === self::MONEDA_USD;
+    }
     
     public function movimientos()
     {

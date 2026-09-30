@@ -8,8 +8,10 @@ use App\Models\Concepto;
 use App\Models\MedioDePago;
 use App\Models\Comprobante;
 use App\Support\Authorization\RoleCapabilities;
+use App\Support\Dolares;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 abstract class MovimientoController extends Controller
 {
@@ -20,6 +22,31 @@ abstract class MovimientoController extends Controller
             403,
             'No autorizado'
         );
+    }
+
+    /**
+     * Con medio en dólares exige monto USD y tipo de cambio, y calcula el monto en pesos.
+     */
+    protected function normalizarDolares(array $data): array
+    {
+        $errores = [];
+        $enDolares = ! empty($data['medio_de_pago_id'])
+            && in_array((int) $data['medio_de_pago_id'], Dolares::idsMediosEnDolares(), true);
+
+        $data = array_merge($data, Dolares::normalizar(
+            $enDolares,
+            $data['monto_usd'] ?? null,
+            $data['tipo_cambio'] ?? null,
+            $data['monto'],
+            '',
+            $errores,
+        ));
+
+        if (! empty($errores)) {
+            throw ValidationException::withMessages($errores);
+        }
+
+        return $data;
     }
 
     /**
@@ -87,10 +114,13 @@ abstract class MovimientoController extends Controller
             'monto'            => 'required|numeric|min:0',
             'concepto_id'      => 'required|exists:concepto,id',
             'medio_de_pago_id' => 'nullable|exists:medio_de_pago,id',
+            'monto_usd'        => 'nullable|numeric|min:0',
+            'tipo_cambio'      => 'nullable|numeric|gt:0',
             'comprobantes'     => 'nullable|array',
             'comprobantes.*'   => 'file|mimes:jpg,jpeg,png,pdf|max:20480',
         ]);
 
+        $data = $this->normalizarDolares($data);
         $data['tipo'] = $this->tipo;
 
         $movimiento = Movimiento::create($data);
@@ -171,6 +201,8 @@ abstract class MovimientoController extends Controller
             'monto'                  => 'required|numeric|min:0',
             'concepto_id'            => 'required|exists:concepto,id',
             'medio_de_pago_id'       => 'nullable|exists:medio_de_pago,id',
+            'monto_usd'              => 'nullable|numeric|min:0',
+            'tipo_cambio'            => 'nullable|numeric|gt:0',
 
             'comprobantes'           => 'nullable|array',
             'comprobantes.*'         => 'file|mimes:jpg,jpeg,png,pdf|max:20480',
@@ -179,6 +211,7 @@ abstract class MovimientoController extends Controller
             'comprobantes_a_eliminar.*' => 'integer|exists:comprobantes,id',
         ]);
 
+        $data = $this->normalizarDolares($data);
         $movimiento->update($data);
 
         // 1) ELIMINAR comprobantes marcados

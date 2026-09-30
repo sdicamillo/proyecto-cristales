@@ -1,9 +1,23 @@
 // resources/js/types/movimiento.ts
 
+export interface Concepto {
+    id: number;
+    nombre: string;
+    tipo: 'ingreso' | 'egreso';
+}
+
+export interface MedioDePago {
+    id: number;
+    nombre: string;
+    moneda?: string; // 'ARS' | 'USD'
+}
+
 export interface Movimiento {
     id: number;
     fecha: string;
     monto: number;
+    monto_usd?: number | null; // Solo en movimientos en dólares ("monto" es el equivalente en pesos)
+    tipo_cambio?: number | null;
     tipo: 'ingreso' | 'egreso';
     comprobante?: string | null;
     orden_de_trabajo_id?: number | null; // NUEVO
@@ -35,6 +49,8 @@ export interface Movimiento {
 export interface MovimientoFormData {
     fecha: string;
     monto: string | number;
+    monto_usd: string | number;
+    tipo_cambio: string | number;
     concepto_id: string | number;
     medio_de_pago_id: string | number;
     comprobantes: File[];

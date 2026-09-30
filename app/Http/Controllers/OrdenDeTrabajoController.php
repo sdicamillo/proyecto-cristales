@@ -24,9 +24,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use App\Models\OrdenDeTrabajoHistorialEstado;
 use App\Support\Authorization\RoleCapabilities;
+use App\Support\Dolares;
 
 class OrdenDeTrabajoController extends Controller
 {
@@ -137,7 +139,7 @@ class OrdenDeTrabajoController extends Controller
             ->get();
 
         $estados = Estado::select('id', 'nombre')->get();
-        $mediosDePago = MedioDePago::select('id', 'nombre')->get();
+        $mediosDePago = MedioDePago::select('id', 'nombre', 'moneda')->get();
 
         $articulos = Articulo::with(['categorias.subcategorias'])
             ->select('id', 'nombre')
@@ -198,6 +200,8 @@ class OrdenDeTrabajoController extends Controller
             'pagos.*.fecha' => 'required|date',
             'pagos.*.pagado' => 'required|boolean',
             'pagos.*.observacion' => 'nullable|string|max:255',
+            'pagos.*.monto_usd' => 'nullable|numeric',
+            'pagos.*.tipo_cambio' => 'nullable|numeric|gt:0',
             'titular_id' => 'nullable|integer|exists:titular,id',
             'vehiculo_id' => 'nullable|integer|exists:vehiculo,id',
             'nuevo_titular' => 'nullable|array',
@@ -236,6 +240,8 @@ class OrdenDeTrabajoController extends Controller
             'nuevo_vehiculo.marca_nueva.max' => 'El nombre de la marca no puede superar los 50 caracteres.',
             'nuevo_vehiculo.modelo_nuevo.max' => 'El nombre del modelo no puede superar los 50 caracteres.',
         ]);
+
+        $validated['pagos'] = $this->normalizarPagos($validated['pagos']);
 
         $totalOrden = collect($validated['detalles'])->reduce(function ($acc, $detalle) {
             return $acc + (floatval($detalle['valor']) * intval($detalle['cantidad']));
@@ -363,6 +369,8 @@ class OrdenDeTrabajoController extends Controller
                     'orden_de_trabajo_id' => $orden->id,
                     'medio_de_pago_id' => $pago['medio_de_pago_id'],
                     'valor' => $pago['monto'],
+                    'monto_usd' => $pago['monto_usd'],
+                    'tipo_cambio' => $pago['tipo_cambio'],
                     'fecha' => $pago['fecha'],
                     'pagado' => $pagado,
                     'bloqueado' => $bloqueado,
@@ -547,11 +555,15 @@ class OrdenDeTrabajoController extends Controller
             'pagos.*.pagado' => 'required|boolean',
             'pagos.*.bloqueado' => 'nullable|boolean',
             'pagos.*.observacion' => 'nullable|string|max:255',
+            'pagos.*.monto_usd' => 'nullable|numeric',
+            'pagos.*.tipo_cambio' => 'nullable|numeric|gt:0',
         ], [
             'completado_por_id.required' => 'Seleccioná quién completó el trabajo.',
             'completado_por_id.exists' => 'La persona seleccionada no existe.',
             'asignado_a_id.exists' => 'La persona asignada no existe.',
         ]);
+
+        $validated['pagos'] = $this->normalizarPagos($validated['pagos']);
 
         $totalOrden = collect($validated['detalles'])->reduce(function ($acc, $detalle) {
             return $acc + (floatval($detalle['valor']) * intval($detalle['cantidad']));
@@ -741,6 +753,8 @@ class OrdenDeTrabajoController extends Controller
                     'orden_de_trabajo_id' => $orden->id,
                     'medio_de_pago_id' => $pago['medio_de_pago_id'],
                     'valor' => $pago['monto'],
+                    'monto_usd' => $pago['monto_usd'],
+                    'tipo_cambio' => $pago['tipo_cambio'],
                     'fecha' => $pago['fecha'],
                     'pagado' => $pagado,
                     'bloqueado' => $bloqueado,
@@ -756,6 +770,33 @@ class OrdenDeTrabajoController extends Controller
         return redirect()
             ->route('ordenes.show', $orden->id)
             ->with('success', 'Orden actualizada correctamente ✅');
+    }
+
+    /**
+     * En pagos en dólares exige monto en USD y tipo de cambio, y calcula el
+     * equivalente en pesos, que es el que se usa en totales y movimientos.
+     */
+    private function normalizarPagos(array $pagos): array
+    {
+        $mediosEnDolares = Dolares::idsMediosEnDolares();
+        $errores = [];
+
+        foreach ($pagos as $i => $pago) {
+            $pagos[$i] = array_merge($pago, Dolares::normalizar(
+                in_array((int) $pago['medio_de_pago_id'], $mediosEnDolares, true),
+                $pago['monto_usd'] ?? null,
+                $pago['tipo_cambio'] ?? null,
+                $pago['monto'],
+                "pagos.{$i}.",
+                $errores,
+            ));
+        }
+
+        if (! empty($errores)) {
+            throw ValidationException::withMessages($errores);
+        }
+
+        return $pagos;
     }
 
     /**
@@ -793,6 +834,8 @@ class OrdenDeTrabajoController extends Controller
                     Movimiento::create([
                         'fecha' => now(),
                         'monto' => $montoParaGuardar,
+                        'monto_usd' => $pago->monto_usd !== null ? abs((float) $pago->monto_usd) : null,
+                        'tipo_cambio' => $pago->tipo_cambio,
                         'concepto_id' => $conceptoId,
                         'medio_de_pago_id' => $pago->medio_de_pago_id,
                         'comprobante' => "OT-{$orden->id}",
@@ -862,6 +905,8 @@ class OrdenDeTrabajoController extends Controller
 
             $orden->setRelation('pagos', $orden->pagos->map(function ($pago) {
                 $pago->valor = null;
+                $pago->monto_usd = null;
+                $pago->tipo_cambio = null;
                 return $pago;
             }));
 
@@ -916,7 +961,7 @@ class OrdenDeTrabajoController extends Controller
             ->get();
 
         $estados = Estado::select('id', 'nombre')->orderBy('nombre')->get();
-        $mediosDePago = MedioDePago::select('id', 'nombre')->orderBy('nombre')->get();
+        $mediosDePago = MedioDePago::select('id', 'nombre', 'moneda')->orderBy('nombre')->get();
         $marcasArticulos = MarcaArticulo::select('id', 'nombre')->orderBy('nombre')->get();
 
         return Inertia::render('ordenes/edit', [
@@ -968,6 +1013,8 @@ class OrdenDeTrabajoController extends Controller
                     Movimiento::create([
                         'fecha' => now(),
                         'monto' => $ingreso->monto,
+                        'monto_usd' => $ingreso->monto_usd,
+                        'tipo_cambio' => $ingreso->tipo_cambio,
                         'concepto_id' => $conceptoAnulacion->id,
                         'medio_de_pago_id' => $ingreso->medio_de_pago_id,
                         'tipo' => Movimiento::TIPO_EGRESO,

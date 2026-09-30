@@ -51,12 +51,17 @@ class CashboxController extends Controller
 
             $totals = Movimiento::totalsForDate($today);
             $neto = $totals['ingresos'] - $totals['egresos'];
+            $totalsUsd = Movimiento::totalsUsdForDate($today);
 
             $snapshot = [
                 'ingresos_total' => $totals['ingresos'],
                 'egresos_total' => $totals['egresos'],
                 'neto_total' => $neto,
                 'saldo_esperado' => $caja->opening_balance + $neto,
+                // Dólares que entraron/salieron (no están incluidos en los totales en pesos)
+                'ingresos_usd' => $totalsUsd['ingresos'],
+                'egresos_usd' => $totalsUsd['egresos'],
+                'neto_usd' => $totalsUsd['ingresos'] - $totalsUsd['egresos'],
             ];
 
             $caja->update([
