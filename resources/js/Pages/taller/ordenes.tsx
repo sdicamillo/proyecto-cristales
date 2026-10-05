@@ -1,6 +1,7 @@
 import DashboardLayout from '@/layouts/DashboardLayout';
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowRight, Car, RotateCcw, Search, User, Wrench, X } from 'lucide-react';
+import ConfirmPausaModal from '@/components/ConfirmPausaModal';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import { ArrowRight, Car, PauseCircle, PlayCircle, RotateCcw, User, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
@@ -39,6 +40,7 @@ interface Filters {
 interface Props {
     ots: OT[];
     estados: Estado[];
+    estadosCambio: Estado[];
     filters?: Filters;
 }
 
@@ -49,6 +51,7 @@ const estadoBadge: Record<string, { pill: string }> = {
     'Finalizada - Para Retirar': { pill: 'bg-green-500 text-white' },
     Retirada:              { pill: 'bg-green-500 text-white' },
     Anulada:                 { pill: 'bg-red-500 text-white' },
+    Pausada:                 { pill: 'bg-violet-700 text-white' },
 };
 
 const estadoFilterColors: Record<string, { active: string; inactive: string }> = {
@@ -57,6 +60,7 @@ const estadoFilterColors: Record<string, { active: string; inactive: string }> =
     'Finalizada - Para Retirar': { active: 'bg-green-600 text-white',  inactive: 'border border-green-300 bg-green-50 text-green-700 hover:bg-green-100' },
     Retirada:              { active: 'bg-green-600 text-white',  inactive: 'border border-green-300 bg-green-50 text-green-700 hover:bg-green-100' },
     Anulada:                 { active: 'bg-red-600 text-white',    inactive: 'border border-red-300 bg-red-50 text-red-700 hover:bg-red-100' },
+    Pausada:                 { active: 'bg-violet-700 text-white', inactive: 'border border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100' },
 };
 
 function getBadgePill(nombre: string) {
@@ -67,10 +71,13 @@ function getFilterStyle(nombre: string) {
     return estadoFilterColors[nombre] ?? { active: 'bg-gray-700 text-white', inactive: 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-100' };
 }
 
-export default function OrdenesTaller({ ots, estados, filters: backendFilters }: Props) {
+export default function OrdenesTaller({ ots, estados, estadosCambio, filters: backendFilters }: Props) {
     const [open, setOpen] = useState(false);
     const [ordenSeleccionada, setOrdenSeleccionada] = useState<OT | null>(null);
     const [estadoId, setEstadoId] = useState<number | null>(null);
+    const [pausarOrden, setPausarOrden] = useState<OT | null>(null);
+    const [reanudarOrdenId, setReanudarOrdenId] = useState<number | null>(null);
+    const pausaForm = useForm({ motivo: '' });
 
     const [searchQ, setSearchQ] = useState(backendFilters?.q ?? '');
     const [dateFrom, setDateFrom] = useState(backendFilters?.date_from ?? '');
@@ -136,6 +143,27 @@ export default function OrdenesTaller({ ots, estados, filters: backendFilters }:
     }
 
     const hasActiveFilters = (backendFilters?.q ?? '') !== '' || activeEstadoId !== null || (backendFilters?.date_from ?? '') !== '' || (backendFilters?.date_to ?? '') !== '';
+
+    function confirmarPausa(motivo: string) {
+        if (!pausarOrden) return;
+
+        pausaForm.transform(() => ({ motivo }));
+        pausaForm.patch(`/ordenes/${pausarOrden.id}/pausar`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setPausarOrden(null);
+                pausaForm.reset();
+            },
+        });
+    }
+
+    function reanudarOrden(ordenId: number) {
+        setReanudarOrdenId(ordenId);
+        router.patch(`/ordenes/${ordenId}/reanudar`, {}, {
+            preserveScroll: true,
+            onFinish: () => setReanudarOrdenId(null),
+        });
+    }
 
     return (
         <DashboardLayout>
@@ -290,7 +318,7 @@ export default function OrdenesTaller({ ots, estados, filters: backendFilters }:
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
                                     {ots.map((ot) => (
-                                        <tr key={ot.id} className="hover:bg-gray-50 transition">
+                                        <tr key={ot.id} className={`transition ${ot.estado.nombre === 'Pausada' ? 'bg-violet-50 hover:bg-violet-100' : 'hover:bg-gray-50'}`}>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                                                 #{ot.id}
                                             </td>
@@ -330,16 +358,36 @@ export default function OrdenesTaller({ ots, estados, filters: backendFilters }:
                                                         Ver orden
                                                         <ArrowRight className="h-3.5 w-3.5" />
                                                     </Link>
-                                                    <button
-                                                        onClick={() => {
-                                                            setOrdenSeleccionada(ot);
-                                                            setEstadoId(ot.estado.id);
-                                                            setOpen(true);
-                                                        }}
-                                                        className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-100"
-                                                    >
-                                                        Cambiar estado
-                                                    </button>
+                                                    {ot.estado.nombre === 'Pausada' ? (
+                                                        <button
+                                                            onClick={() => reanudarOrden(ot.id)}
+                                                            disabled={reanudarOrdenId === ot.id}
+                                                            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                                                        >
+                                                            <PlayCircle className="h-3.5 w-3.5" />
+                                                            {reanudarOrdenId === ot.id ? 'Reanudando…' : 'Reanudar'}
+                                                        </button>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={() => setPausarOrden(ot)}
+                                                                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3.5 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"
+                                                            >
+                                                                <PauseCircle className="h-3.5 w-3.5" />
+                                                                Pausar
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setOrdenSeleccionada(ot);
+                                                                    setEstadoId(ot.estado.id);
+                                                                    setOpen(true);
+                                                                }}
+                                                                className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-100"
+                                                            >
+                                                                Cambiar estado
+                                                            </button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -351,7 +399,7 @@ export default function OrdenesTaller({ ots, estados, filters: backendFilters }:
                         {/* Cards Mobile */}
                         <div className="md:hidden divide-y divide-gray-200">
                             {ots.map((ot) => (
-                                <div key={ot.id} className="p-4 space-y-3">
+                                <div key={ot.id} className={`p-4 space-y-3 ${ot.estado.nombre === 'Pausada' ? 'bg-violet-50' : ''}`}>
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-bold text-gray-900">OT #{ot.id}</span>
@@ -396,16 +444,36 @@ export default function OrdenesTaller({ ots, estados, filters: backendFilters }:
                                             Ver orden
                                             <ArrowRight className="h-3.5 w-3.5" />
                                         </Link>
-                                        <button
-                                            onClick={() => {
-                                                setOrdenSeleccionada(ot);
-                                                setEstadoId(ot.estado.id);
-                                                setOpen(true);
-                                            }}
-                                            className="flex-1 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-100"
-                                        >
-                                            Cambiar estado
-                                        </button>
+                                        {ot.estado.nombre === 'Pausada' ? (
+                                            <button
+                                                onClick={() => reanudarOrden(ot.id)}
+                                                disabled={reanudarOrdenId === ot.id}
+                                                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                                            >
+                                                <PlayCircle className="h-3.5 w-3.5" />
+                                                {reanudarOrdenId === ot.id ? 'Reanudando…' : 'Reanudar'}
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    onClick={() => setPausarOrden(ot)}
+                                                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"
+                                                >
+                                                    <PauseCircle className="h-3.5 w-3.5" />
+                                                    Pausar
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setOrdenSeleccionada(ot);
+                                                        setEstadoId(ot.estado.id);
+                                                        setOpen(true);
+                                                    }}
+                                                    className="flex-1 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-100"
+                                                >
+                                                    Cambiar estado
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -431,7 +499,7 @@ export default function OrdenesTaller({ ots, estados, filters: backendFilters }:
                         <h3 className="text-lg font-bold text-gray-900">Cambiar estado de OT #{ordenSeleccionada.id}</h3>
 
                         <div className="mt-4 space-y-2">
-                            {estados.map((estado) => {
+                            {estadosCambio.map((estado) => {
                                 const isSelected = estadoId === estado.id;
                                 const pillColor = getBadgePill(estado.nombre);
                                 return (
@@ -499,6 +567,20 @@ export default function OrdenesTaller({ ots, estados, filters: backendFilters }:
                         </div>
                     </div>
                 </div>
+            )}
+
+            {pausarOrden && (
+                <ConfirmPausaModal
+                    open={true}
+                    onClose={() => {
+                        setPausarOrden(null);
+                        pausaForm.clearErrors();
+                    }}
+                    onConfirm={confirmarPausa}
+                    ordenId={pausarOrden.id}
+                    processing={pausaForm.processing}
+                    error={pausaForm.errors.motivo || (pausaForm.errors as Record<string, string>).estado}
+                />
             )}
         </DashboardLayout>
     );

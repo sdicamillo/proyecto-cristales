@@ -1,10 +1,11 @@
 import ConfirmAnularModal from '@/components/ConfirmAnularModal';
+import ConfirmPausaModal from '@/components/ConfirmPausaModal';
 import PrintableODT from '@/components/print/PrintableODT';
 import MontoConDolares from '@/components/ui/MontoConDolares';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import { PERMISSIONS, useAuthorization } from '@/lib/permissions';
 import { formatDateTimeToArgentina, formatDateToArgentina } from '@/utils/dateFormat';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowLeft,
@@ -15,6 +16,8 @@ import {
     FileText,
     Mail,
     Phone,
+    PauseCircle,
+    PlayCircle,
     Printer,
     User,
 } from 'lucide-react';
@@ -99,18 +102,28 @@ export default function Show({
     const { has } = useAuthorization();
     const canViewFinancialAmounts = has(PERMISSIONS.financeAmountsView);
     const showFinancialSections = canViewFinancialAmounts;
-    const canManageOrders = has(PERMISSIONS.ordersManage) && !esTaller;
+    const hasOrdersPermission = has(PERMISSIONS.ordersManage);
+    const canManageOrders = hasOrdersPermission && !esTaller;
     const companiaNombre = orden.compania_seguro?.nombre ?? 'Sin seguro / Particular';
     const backUrl = esTaller ? '/taller/ots' : '/ordenes';
     const isAnulada = orden.estado.nombre === 'Anulada';
     const isRetirada = orden.estado.nombre === 'Retirada';
-    const canManageOrder = canManageOrders && !isAnulada && !isRetirada;
+    const isFinalizada = orden.estado.nombre === 'Finalizada - Para Retirar';
+    const isPausada = orden.estado.nombre === 'Pausada';
+    const canManageOrder = canManageOrders && !isAnulada && !isRetirada && !isPausada;
+    const canPauseOrder = hasOrdersPermission && !isAnulada && !isRetirada && !isFinalizada && !isPausada;
     const [showAnularModal, setShowAnularModal] = useState(false);
+    const [showPausaModal, setShowPausaModal] = useState(false);
+    const [reanudarProcessing, setReanudarProcessing] = useState(false);
     const anularForm = useForm({ motivo: '' });
+    const pausaForm = useForm({ motivo: '' });
 
     // Ultima anulacion registrada: es la que explica el estado actual de la orden.
     const anulacion = isAnulada
         ? [...(orden.historial_estados ?? [])].reverse().find((h) => h.estado?.nombre === 'Anulada') ?? null
+        : null;
+    const pausa = isPausada
+        ? [...(orden.historial_estados ?? [])].reverse().find((h) => h.estado?.nombre === 'Pausada') ?? null
         : null;
 
     const formatMoney = (value: number) => `$${value.toLocaleString('es-AR')}`;
@@ -130,6 +143,25 @@ export default function Show({
     function handleAnularClose() {
         setShowAnularModal(false);
         anularForm.clearErrors();
+    }
+
+    function handlePausar(motivo: string) {
+        pausaForm.transform(() => ({ motivo }));
+        pausaForm.patch(`/ordenes/${orden.id}/pausar`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setShowPausaModal(false);
+                pausaForm.reset();
+            },
+        });
+    }
+
+    function handleReanudar() {
+        setReanudarProcessing(true);
+        router.patch(`/ordenes/${orden.id}/reanudar`, {}, {
+            preserveScroll: true,
+            onFinish: () => setReanudarProcessing(false),
+        });
     }
 
     return (
@@ -165,6 +197,31 @@ export default function Show({
                     </div>
                 )}
 
+                {isPausada && (
+                    <div className="mb-6 rounded-2xl border border-violet-200 bg-violet-50 px-6 py-4">
+                        <div className="flex items-start gap-3">
+                            <PauseCircle className="mt-0.5 h-6 w-6 shrink-0 text-violet-700" />
+                            <div className="min-w-0 flex-1">
+                                <p className="font-bold text-violet-900">Orden pausada</p>
+                                <p className="text-sm text-violet-700">
+                                    Esta orden está disponible sólo para consulta hasta que sea reanudada.
+                                </p>
+                                {pausa?.motivo && (
+                                    <div className="mt-3 rounded-xl border border-violet-200 bg-white/70 px-4 py-3">
+                                        <p className="text-xs font-semibold uppercase tracking-wider text-violet-700">Motivo</p>
+                                        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-violet-950">{pausa.motivo}</p>
+                                    </div>
+                                )}
+                                {pausa && (
+                                    <p className="mt-2 text-xs text-violet-600">
+                                        Pausada por {pausa.user?.name ?? 'Sistema'} el {formatDateTimeToArgentina(pausa.created_at)}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
                     <div className="flex items-center gap-3">
                         <Link
@@ -182,9 +239,11 @@ export default function Show({
                                     className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
                                         isAnulada
                                             ? 'border-red-200 bg-red-100 text-red-700'
-                                            : isRetirada
-                                              ? 'border-green-200 bg-green-100 text-green-700'
-                                              : 'border-yellow-200 bg-yellow-100 text-yellow-700'
+                                            : isPausada
+                                              ? 'border-violet-200 bg-violet-100 text-violet-800'
+                                              : isRetirada
+                                                ? 'border-green-200 bg-green-100 text-green-700'
+                                                : 'border-yellow-200 bg-yellow-100 text-yellow-700'
                                     }`}
                                 >
                                     {orden.estado.nombre}
@@ -211,6 +270,25 @@ export default function Show({
                             >
                                 Editar Orden
                             </Link>
+                        )}
+                        {canPauseOrder && (
+                            <button
+                                onClick={() => setShowPausaModal(true)}
+                                className="inline-flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 font-medium text-white transition hover:bg-violet-800"
+                            >
+                                <PauseCircle className="h-4 w-4" />
+                                Pausar
+                            </button>
+                        )}
+                        {hasOrdersPermission && isPausada && (
+                            <button
+                                onClick={handleReanudar}
+                                disabled={reanudarProcessing}
+                                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                                <PlayCircle className="h-4 w-4" />
+                                {reanudarProcessing ? 'Reanudando…' : 'Reanudar'}
+                            </button>
                         )}
                         {canManageOrder && (
                             <button
@@ -380,7 +458,11 @@ export default function Show({
                                             )}
                                             <div
                                                 className={`absolute left-0 top-1.5 h-4 w-4 rounded-full border-4 border-white shadow ${
-                                                    h.estado?.nombre === 'Anulada' ? 'bg-red-500' : 'bg-green-500'
+                                                    h.estado?.nombre === 'Anulada'
+                                                        ? 'bg-red-500'
+                                                        : h.estado?.nombre === 'Pausada'
+                                                          ? 'bg-violet-600'
+                                                          : 'bg-green-500'
                                                 }`}
                                             ></div>
                                             <div className="ml-4">
@@ -471,6 +553,19 @@ export default function Show({
                     onConfirm={handleAnular}
                     processing={anularForm.processing}
                     error={anularForm.errors.motivo}
+                    ordenId={orden.id}
+                />
+            )}
+            {hasOrdersPermission && (
+                <ConfirmPausaModal
+                    open={showPausaModal}
+                    onClose={() => {
+                        setShowPausaModal(false);
+                        pausaForm.clearErrors();
+                    }}
+                    onConfirm={handlePausar}
+                    processing={pausaForm.processing}
+                    error={pausaForm.errors.motivo || (pausaForm.errors as Record<string, string>).estado}
                     ordenId={orden.id}
                 />
             )}

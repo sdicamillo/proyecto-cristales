@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -18,12 +19,24 @@ return new class extends Migration
 
         // Opcional: Poblar las fechas existentes con la fecha de la orden
         // Si ya tenés registros sin fecha, esto los actualiza
-        DB::statement('
-            UPDATE precio p
-            INNER JOIN orden_de_trabajo o ON p.orden_de_trabajo_id = o.id
-            SET p.fecha = DATE(o.fecha)
-            WHERE p.fecha IS NULL
-        ');
+        if (DB::getDriverName() === 'sqlite') {
+            DB::statement('
+                UPDATE precio
+                SET fecha = (
+                    SELECT DATE(o.fecha)
+                    FROM orden_de_trabajo o
+                    WHERE o.id = precio.orden_de_trabajo_id
+                )
+                WHERE fecha IS NULL
+            ');
+        } else {
+            DB::statement('
+                UPDATE precio p
+                INNER JOIN orden_de_trabajo o ON p.orden_de_trabajo_id = o.id
+                SET p.fecha = DATE(o.fecha)
+                WHERE p.fecha IS NULL
+            ');
+        }
 
         // Hacer el campo NOT NULL después de poblar
         Schema::table('precio', function (Blueprint $table) {

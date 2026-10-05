@@ -4,10 +4,13 @@ import DashboardLayout from "@/layouts/DashboardLayout";
 import { formatDateTimeToArgentina } from "@/utils/dateFormat";
 import { CheckCircle, AlertCircle } from "lucide-react";
 import ConfirmAnularModal from "@/components/ConfirmAnularModal";
+import ConfirmPausaModal from '@/components/ConfirmPausaModal';
 import EditButton from '@/components/botones/boton-editar';
 import DeleteButton from '@/components/botones/boton-eliminar';
 import ViewButton from '@/components/botones/boton-ver';
 import { ordenarPorEtiqueta } from '@/lib/utils';
+import { PERMISSIONS, useAuthorization } from '@/lib/permissions';
+import { PauseCircle, PlayCircle } from 'lucide-react';
 
 type Vehiculo = {
   id: number;
@@ -60,6 +63,9 @@ type Filters = {
 
 export default function Index({ ordenes }: { ordenes: any }) {
     const anularForm = useForm({ motivo: '' });
+    const pausaForm = useForm({ motivo: '' });
+    const { has } = useAuthorization();
+    const canManageOrders = has(PERMISSIONS.ordersManage);
 
     /**
      * Requisitos para que esto funcione:
@@ -87,6 +93,8 @@ export default function Index({ ordenes }: { ordenes: any }) {
     const links = ordenes?.links || [];
 
   const [anularOrdenId, setAnularOrdenId] = useState<number | null>(null);
+  const [pausarOrdenId, setPausarOrdenId] = useState<number | null>(null);
+  const [reanudarOrdenId, setReanudarOrdenId] = useState<number | null>(null);
 
   function handleAnularConfirm(motivo: string) {
     if (anularOrdenId === null) return;
@@ -105,6 +113,32 @@ export default function Index({ ordenes }: { ordenes: any }) {
   function handleAnularClose() {
     setAnularOrdenId(null);
     anularForm.clearErrors();
+  }
+
+  function handlePausarConfirm(motivo: string) {
+    if (pausarOrdenId === null) return;
+
+    pausaForm.transform(() => ({ motivo }));
+    pausaForm.patch(`/ordenes/${pausarOrdenId}/pausar`, {
+      preserveScroll: true,
+      onSuccess: () => {
+        setPausarOrdenId(null);
+        pausaForm.reset();
+      },
+    });
+  }
+
+  function handlePausarClose() {
+    setPausarOrdenId(null);
+    pausaForm.clearErrors();
+  }
+
+  function handleReanudar(ordenId: number) {
+    setReanudarOrdenId(ordenId);
+    router.patch(`/ordenes/${ordenId}/reanudar`, {}, {
+      preserveScroll: true,
+      onFinish: () => setReanudarOrdenId(null),
+    });
   }
 
     const todayISO = useMemo(() => {
@@ -425,7 +459,11 @@ export default function Index({ ordenes }: { ordenes: any }) {
                     {listaOrdenes.map((orden: Orden) => (
                       <tr
                         key={orden.id}
-                        className={`hover:bg-gray-50 transition ${orden.estado?.nombre === 'Anulada' ? 'opacity-60' : ''}`}
+                        className={`transition ${
+                          orden.estado?.nombre === 'Pausada'
+                            ? 'bg-violet-50 hover:bg-violet-100'
+                            : `hover:bg-gray-50 ${orden.estado?.nombre === 'Anulada' ? 'opacity-60' : ''}`
+                        }`}
                       >
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {formatDateTimeToArgentina(orden.fecha)}
@@ -445,6 +483,7 @@ export default function Index({ ordenes }: { ordenes: any }) {
                             (() => {
                               switch (orden.estado?.nombre) {
                                 case 'Anulada': return 'bg-red-500';
+                                case 'Pausada': return 'bg-violet-700';
                                 case 'Iniciado': return 'bg-amber-500';
                                 case 'En taller': return 'bg-blue-500';
                                 case 'Finalizada - Para Retirar': return 'bg-teal-500';
@@ -464,12 +503,31 @@ export default function Index({ ordenes }: { ordenes: any }) {
                             <ViewButton
                               onClick={() => router.visit(`/ordenes/${orden.id}?return=${encodeURIComponent(returnUrl)}`)}
                             />
-                            {orden.estado?.nombre !== 'Retirada' && orden.estado?.nombre !== 'Anulada' && (
+                            {canManageOrders && orden.estado?.nombre !== 'Retirada' && orden.estado?.nombre !== 'Anulada' && orden.estado?.nombre !== 'Pausada' && (
                               <EditButton
                                 onClick={() => router.visit(`/ordenes/${orden.id}/edit?return=${encodeURIComponent(returnUrl)}`)}
                               />
                             )}
-                            {orden.estado?.nombre !== 'Retirada' && orden.estado?.nombre !== 'Anulada' && (
+                            {canManageOrders && !['Finalizada - Para Retirar', 'Retirada', 'Anulada', 'Pausada'].includes(orden.estado?.nombre) && (
+                              <button
+                                onClick={() => setPausarOrdenId(orden.id)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100"
+                              >
+                                <PauseCircle className="h-3.5 w-3.5" />
+                                Pausar
+                              </button>
+                            )}
+                            {canManageOrders && orden.estado?.nombre === 'Pausada' && (
+                              <button
+                                onClick={() => handleReanudar(orden.id)}
+                                disabled={reanudarOrdenId === orden.id}
+                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                              >
+                                <PlayCircle className="h-3.5 w-3.5" />
+                                {reanudarOrdenId === orden.id ? 'Reanudando…' : 'Reanudar'}
+                              </button>
+                            )}
+                            {canManageOrders && orden.estado?.nombre !== 'Retirada' && orden.estado?.nombre !== 'Anulada' && orden.estado?.nombre !== 'Pausada' && (
                               <button
                                 onClick={() => setAnularOrdenId(orden.id)}
                                 className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100"
@@ -540,6 +598,16 @@ export default function Index({ ordenes }: { ordenes: any }) {
           ordenId={anularOrdenId}
           processing={anularForm.processing}
           error={anularForm.errors.motivo}
+        />
+      )}
+      {pausarOrdenId !== null && (
+        <ConfirmPausaModal
+          open={true}
+          onClose={handlePausarClose}
+          onConfirm={handlePausarConfirm}
+          ordenId={pausarOrdenId}
+          processing={pausaForm.processing}
+          error={pausaForm.errors.motivo || (pausaForm.errors as Record<string, string>).estado}
         />
       )}
     </DashboardLayout>

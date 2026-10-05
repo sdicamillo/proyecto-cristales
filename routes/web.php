@@ -105,6 +105,13 @@ Route::middleware(['auth'])->group(function () {
             'ordenes' => 'orden',
         ]);
 
+    Route::middleware('capability:' . RoleCapabilities::MANAGE_ORDERS)->group(function () {
+        Route::patch('/ordenes/{orden}/pausar', [OrdenDeTrabajoController::class, 'pausar'])
+            ->name('ordenes.pausar');
+        Route::patch('/ordenes/{orden}/reanudar', [OrdenDeTrabajoController::class, 'reanudar'])
+            ->name('ordenes.reanudar');
+    });
+
     Route::middleware(['rol.taller'])->group(function () {
         Route::get('/taller/ots', [OrdenDeTrabajoController::class, 'pendientes'])
             ->name('taller.ots');

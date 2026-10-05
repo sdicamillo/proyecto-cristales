@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { toast } from "react-hot-toast";
 
 import DashboardLayout from "@/layouts/DashboardLayout";
+import ConfirmPausaModal from '@/components/ConfirmPausaModal';
+import { PauseCircle } from 'lucide-react';
 
 import ClienteSection, { ClienteSectionRef } from "@/components/ui/ClienteSection";
 import VehiculoSection, { VehiculoSectionRef } from "@/components/ui/VehiculoSection";
@@ -177,6 +179,10 @@ export default function Edit({
   const put = form.put;
   const processing = form.processing;
   const errors = form.errors as Record<string, string>;
+  const pausaForm = useForm({ motivo: '' });
+  const [showPausaModal, setShowPausaModal] = React.useState(false);
+  const estadoActualNombre = estados.find((estado) => estado.id === orden.estado_id)?.nombre;
+  const canPauseOrder = !!estadoActualNombre && !['Finalizada - Para Retirar', 'Retirada', 'Anulada'].includes(estadoActualNombre);
 
   const uiErrors = errors as Record<string, string>;
 
@@ -255,6 +261,16 @@ export default function Edit({
     });
   }
 
+  function handlePausar(motivo: string) {
+    pausaForm.transform(() => ({ motivo }));
+    pausaForm.patch(`/ordenes/${orden.id}/pausar`, {
+      onSuccess: () => {
+        setShowPausaModal(false);
+        pausaForm.reset();
+      },
+    });
+  }
+
   return (
     <DashboardLayout>
       <Head title={`Editar OT #${orden.id}`} />
@@ -266,9 +282,21 @@ export default function Edit({
             <h1 className="text-3xl font-bold text-gray-900">Editar Orden #{orden.id}</h1>
             <p className="mt-1 text-gray-600">Ajustá cabecera, ítems y pagos. Los pagos bloqueados no pueden modificarse.</p>
           </div>
-          <Link href={returnUrl} className="text-sm text-gray-600 hover:text-gray-900">
-            Volver
-          </Link>
+          <div className="flex items-center gap-3">
+            {canPauseOrder && (
+              <button
+                type="button"
+                onClick={() => setShowPausaModal(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-800"
+              >
+                <PauseCircle className="h-4 w-4" />
+                Pausar orden
+              </button>
+            )}
+            <Link href={returnUrl} className="text-sm text-gray-600 hover:text-gray-900">
+              Volver
+            </Link>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
@@ -456,6 +484,19 @@ export default function Edit({
           </div>
         </form>
       </div>
+
+      <ConfirmPausaModal
+        open={showPausaModal}
+        onClose={() => {
+          setShowPausaModal(false);
+          pausaForm.clearErrors();
+        }}
+        onConfirm={handlePausar}
+        ordenId={orden.id}
+        processing={pausaForm.processing}
+        error={pausaForm.errors.motivo || (pausaForm.errors as Record<string, string>).estado}
+        warnUnsavedChanges={form.isDirty}
+      />
     </DashboardLayout>
   );
 }

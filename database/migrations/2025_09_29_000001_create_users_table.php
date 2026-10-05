@@ -8,6 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // SQLite no permite eliminar una columna mientras conserva un índice que la referencia.
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropUnique(['email']);
+        });
+
         Schema::table('users', function (Blueprint $table) {
             // Elimina columnas que no querés
             $table->dropColumn(['email', 'email_verified_at', 'remember_token']);

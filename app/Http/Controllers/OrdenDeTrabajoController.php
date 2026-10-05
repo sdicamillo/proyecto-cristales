@@ -8,27 +8,27 @@ use App\Models\Concepto;
 use App\Models\DetalleOrdenAtributo;
 use App\Models\DetalleOrdenDeTrabajo;
 use App\Models\Estado;
-use App\Models\User;
-use App\Models\MarcaArticulo;
 use App\Models\Marca;
+use App\Models\MarcaArticulo;
 use App\Models\MedioDePago;
 use App\Models\Modelo;
 use App\Models\Movimiento;
 use App\Models\OrdenDeTrabajo;
+use App\Models\OrdenDeTrabajoHistorialEstado;
 use App\Models\Precio;
 use App\Models\Subcategoria;
 use App\Models\Titular;
 use App\Models\TitularVehiculo;
+use App\Models\User;
 use App\Models\Vehiculo;
+use App\Support\Authorization\RoleCapabilities;
+use App\Support\Dolares;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use App\Models\OrdenDeTrabajoHistorialEstado;
-use App\Support\Authorization\RoleCapabilities;
-use App\Support\Dolares;
 
 class OrdenDeTrabajoController extends Controller
 {
@@ -63,18 +63,18 @@ class OrdenDeTrabajoController extends Controller
             })
             ->when(
                 $request->filled('estado_id'),
-                fn($q) => $q->where('estado_id', $request->estado_id)
+                fn ($q) => $q->where('estado_id', $request->estado_id)
             )
             ->when($request->filled('con_factura'), function ($q) use ($request) {
                 $q->where('con_factura', (int) $request->con_factura);
             })
             ->when(
                 $request->filled('date_from'),
-                fn($q) => $q->whereDate('fecha', '>=', $request->date_from)
+                fn ($q) => $q->whereDate('fecha', '>=', $request->date_from)
             )
             ->when(
                 $request->filled('date_to'),
-                fn($q) => $q->whereDate('fecha', '<=', $request->date_to)
+                fn ($q) => $q->whereDate('fecha', '<=', $request->date_to)
             )
             ->orderByDesc('fecha')
             ->orderByDesc('orden_de_trabajo.id')
@@ -138,7 +138,9 @@ class OrdenDeTrabajoController extends Controller
             ->select('id', 'nombre', 'apellido', 'telefono', 'email')
             ->get();
 
-        $estados = Estado::select('id', 'nombre')->get();
+        $estados = Estado::select('id', 'nombre')
+            ->where('nombre', '!=', Estado::NOMBRE_PAUSADA)
+            ->get();
         $mediosDePago = MedioDePago::select('id', 'nombre', 'moneda')->get();
 
         $articulos = Articulo::with(['categorias.subcategorias'])
@@ -170,7 +172,7 @@ class OrdenDeTrabajoController extends Controller
         abort_if($this->isTallerUser(), 403);
 
         $validated = $request->validate([
-            'estado_id' => 'required|exists:estado,id',
+            'estado_id' => ['required', Rule::exists('estado', 'id')->where(fn ($query) => $query->where('nombre', '!=', Estado::NOMBRE_PAUSADA))],
             'asignado_a_id' => ['nullable', 'integer', 'exists:users,id'],
             'completado_por_id' => [Rule::requiredIf(fn () => Estado::whereKey($request->input('estado_id'))->whereIn('nombre', [Estado::NOMBRE_FINALIZADA, Estado::NOMBRE_RETIRADA])->exists()), 'nullable', 'integer', 'exists:users,id'],
             'fecha' => 'required|date',
@@ -211,7 +213,7 @@ class OrdenDeTrabajoController extends Controller
             'nuevo_vehiculo.marca_nueva' => 'nullable|string|max:50',
             'nuevo_vehiculo.modelo_id' => 'nullable|integer|exists:modelos,id',
             'nuevo_vehiculo.modelo_nuevo' => 'nullable|string|max:50',
-            'nuevo_vehiculo.anio' => 'nullable|integer|min:1900|max:' . date('Y'),
+            'nuevo_vehiculo.anio' => 'nullable|integer|min:1900|max:'.date('Y'),
         ], [
             'completado_por_id.required' => 'Seleccioná quién completó el trabajo.',
             'completado_por_id.exists' => 'La persona seleccionada no existe.',
@@ -258,8 +260,9 @@ class OrdenDeTrabajoController extends Controller
 
             if ($totalPagado < $totalOrden) {
                 $falta = $totalOrden - $totalPagado;
+
                 return back()
-                    ->withErrors(['estado_id' => "La orden debe estar totalmente pagada para marcarla como finalizada o retirada. Saldo pendiente: $" . number_format($falta, 2)])
+                    ->withErrors(['estado_id' => 'La orden debe estar totalmente pagada para marcarla como finalizada o retirada. Saldo pendiente: $'.number_format($falta, 2)])
                     ->withInput();
             }
         }
@@ -285,12 +288,13 @@ class OrdenDeTrabajoController extends Controller
                 }
             }
         }
-        if (!empty($atributoFieldErrors)) {
+        if (! empty($atributoFieldErrors)) {
             $partes = [];
             foreach ($faltantesPorArticulo as $artNombre => $campos) {
-                $partes[] = 'Falta completar ' . implode(' y ', $campos) . ' del artículo ' . $artNombre;
+                $partes[] = 'Falta completar '.implode(' y ', $campos).' del artículo '.$artNombre;
             }
-            return back()->withErrors($atributoFieldErrors)->withInput()->with('error', implode('. ', $partes) . '.');
+
+            return back()->withErrors($atributoFieldErrors)->withInput()->with('error', implode('. ', $partes).'.');
         }
         // --- FIN VALIDACIÓN ---
 
@@ -306,10 +310,10 @@ class OrdenDeTrabajoController extends Controller
                 ->withInput();
         }
 
-        if (empty($data['vehiculo_id']) && !empty($data['nuevo_vehiculo'])) {
+        if (empty($data['vehiculo_id']) && ! empty($data['nuevo_vehiculo'])) {
             $erroresVehiculo = $this->validarVehiculoNuevo($data['nuevo_vehiculo']);
 
-            if (!empty($erroresVehiculo)) {
+            if (! empty($erroresVehiculo)) {
                 return back()->withErrors($erroresVehiculo)->withInput();
             }
         }
@@ -319,7 +323,7 @@ class OrdenDeTrabajoController extends Controller
             : (($validated['tipo_documento'] ?? 'OT') === 'FC');
 
         $orden = DB::transaction(function () use ($data, $validated, $conFactura) {
-            if (empty($data['titular_id']) && !empty($data['nuevo_titular'])) {
+            if (empty($data['titular_id']) && ! empty($data['nuevo_titular'])) {
                 $nuevoTitular = Titular::create([
                     'nombre' => $data['nuevo_titular']['nombre'] ?? '',
                     'apellido' => $data['nuevo_titular']['apellido'] ?? '',
@@ -329,7 +333,7 @@ class OrdenDeTrabajoController extends Controller
                 $data['titular_id'] = $nuevoTitular->id;
             }
 
-            if (empty($data['vehiculo_id']) && !empty($data['nuevo_vehiculo'])) {
+            if (empty($data['vehiculo_id']) && ! empty($data['nuevo_vehiculo'])) {
                 $data['vehiculo_id'] = $this->crearVehiculoNuevo($data['nuevo_vehiculo'])->id;
             }
 
@@ -358,7 +362,7 @@ class OrdenDeTrabajoController extends Controller
             OrdenDeTrabajoHistorialEstado::create([
                 'orden_de_trabajo_id' => $orden->id,
                 'estado_id' => $orden->estado_id,
-                'user_id' => auth()->id()
+                'user_id' => auth()->id(),
             ]);
 
             foreach (($validated['pagos'] ?? []) as $pago) {
@@ -398,7 +402,7 @@ class OrdenDeTrabajoController extends Controller
                     }
 
                     $sc = Subcategoria::with('categoria')->find($subcategoriaId);
-                    if (!$sc) {
+                    if (! $sc) {
                         continue;
                     }
 
@@ -418,35 +422,35 @@ class OrdenDeTrabajoController extends Controller
 
         return redirect()
             ->route('ordenes.index')
-            ->with('success', 'Orden creada correctamente ✅ (ID: ' . $orden->id . ')');
+            ->with('success', 'Orden creada correctamente ✅ (ID: '.$orden->id.')');
     }
 
- /*   public function show(OrdenDeTrabajo $orden)
-    {
-        $orden->load([
-            'estado',
-            'titularVehiculo.titular',
-            'titularVehiculo.vehiculo',
-            'detalles',
-            'pagos.medioDePago',
-        ]);
+    /*   public function show(OrdenDeTrabajo $orden)
+       {
+           $orden->load([
+               'estado',
+               'titularVehiculo.titular',
+               'titularVehiculo.vehiculo',
+               'detalles',
+               'pagos.medioDePago',
+           ]);
 
-        return Inertia::render('ordenes/show', [
-            'orden' => $orden,
-            'userRoleId' => auth()->user()->role_id,
-        ]);
-    }*/
+           return Inertia::render('ordenes/show', [
+               'orden' => $orden,
+               'userRoleId' => auth()->user()->role_id,
+           ]);
+       }*/
 
     public function pendientes(Request $request)
     {
         $ots = OrdenDeTrabajo::with([
-                'estado',
-                'titularVehiculo.titular',
-                'titularVehiculo.vehiculo.marca',
-                'titularVehiculo.vehiculo.modelo',
-            ])
+            'estado',
+            'titularVehiculo.titular',
+            'titularVehiculo.vehiculo.marca',
+            'titularVehiculo.vehiculo.modelo',
+        ])
             ->whereIn('estado_id', Estado::idsParaTaller())
-            ->when(Estado::idAnulada(), fn($query, $estadoAnuladaId) => $query->where('estado_id', '!=', $estadoAnuladaId))
+            ->when(Estado::idAnulada(), fn ($query, $estadoAnuladaId) => $query->where('estado_id', '!=', $estadoAnuladaId))
             ->when($request->filled('q'), function ($query) use ($request) {
                 $q = $request->q;
                 $query->where(function ($sub) use ($q) {
@@ -462,20 +466,25 @@ class OrdenDeTrabajoController extends Controller
             })
             ->when(
                 $request->filled('estado_id'),
-                fn($q) => $q->where('estado_id', $request->estado_id)
+                fn ($q) => $q->where('estado_id', $request->estado_id)
             )
             ->when(
                 $request->filled('date_from'),
-                fn($q) => $q->whereDate('fecha', '>=', $request->date_from)
+                fn ($q) => $q->whereDate('fecha', '>=', $request->date_from)
             )
             ->when(
                 $request->filled('date_to'),
-                fn($q) => $q->whereDate('fecha', '<=', $request->date_to)
+                fn ($q) => $q->whereDate('fecha', '<=', $request->date_to)
             )
             ->orderByDesc('orden_de_trabajo.id')
             ->get();
 
         $estados = Estado::select('id', 'nombre')
+            ->whereIn('id', Estado::idsParaTaller())
+            ->orderBy('id')
+            ->get();
+
+        $estadosCambio = Estado::select('id', 'nombre')
             ->whereIn('id', Estado::idsPermitidosCambioTaller())
             ->orderBy('id')
             ->get();
@@ -483,16 +492,21 @@ class OrdenDeTrabajoController extends Controller
         return Inertia::render('taller/ordenes', [
             'ots' => $ots,
             'estados' => $estados,
+            'estadosCambio' => $estadosCambio,
             'filters' => $request->only(['q', 'estado_id', 'date_from', 'date_to']),
         ]);
     }
 
     public function cambiarEstadoTaller(Request $request, OrdenDeTrabajo $orden)
     {
+        if ($orden->estado()->where('nombre', Estado::NOMBRE_PAUSADA)->exists()) {
+            return back()->withErrors(['estado_id' => 'La orden está pausada. Reanudala antes de cambiar su estado.']);
+        }
+
         $estadosPermitidos = Estado::idsPermitidosCambioTaller();
 
         $request->validate([
-            'estado_id' => ['required', 'integer', 'in:' . implode(',', $estadosPermitidos)],
+            'estado_id' => ['required', 'integer', 'in:'.implode(',', $estadosPermitidos)],
         ]);
 
         // Actualiza el estado
@@ -503,11 +517,13 @@ class OrdenDeTrabajoController extends Controller
         return redirect()->back()->with('success', 'Estado actualizado correctamente');
     }
 
-
-
     public function update(Request $request, OrdenDeTrabajo $orden)
     {
         abort_if($this->isTallerUser(), 403);
+
+        if ($orden->estado()->where('nombre', Estado::NOMBRE_PAUSADA)->exists()) {
+            return back()->withErrors(['error' => 'La orden está pausada y no puede modificarse hasta que sea reanudada.']);
+        }
 
         $validated = $request->validate([
             'titular_id' => 'nullable|integer|exists:titular,id',
@@ -523,8 +539,8 @@ class OrdenDeTrabajoController extends Controller
             'nuevo_vehiculo.marca_nueva' => 'nullable|string|max:50',
             'nuevo_vehiculo.modelo_id' => 'nullable|integer|exists:modelos,id',
             'nuevo_vehiculo.modelo_nuevo' => 'nullable|string|max:50',
-            'nuevo_vehiculo.anio' => 'nullable|integer|min:1900|max:' . date('Y'),
-            'estado_id' => 'required|exists:estado,id',
+            'nuevo_vehiculo.anio' => 'nullable|integer|min:1900|max:'.date('Y'),
+            'estado_id' => ['required', Rule::exists('estado', 'id')->where(fn ($query) => $query->where('nombre', '!=', Estado::NOMBRE_PAUSADA))],
             'asignado_a_id' => ['nullable', 'integer', 'exists:users,id'],
             'completado_por_id' => [Rule::requiredIf(fn () => Estado::whereKey($request->input('estado_id'))->whereIn('nombre', [Estado::NOMBRE_FINALIZADA, Estado::NOMBRE_RETIRADA])->exists()), 'nullable', 'integer', 'exists:users,id'],
             'fecha' => 'required|date',
@@ -580,8 +596,9 @@ class OrdenDeTrabajoController extends Controller
 
             if ($totalPagado < $totalOrden) {
                 $falta = $totalOrden - $totalPagado;
+
                 return back()
-                    ->withErrors(['estado_id' => "No se puede finalizar o retirar la OT: El saldo pendiente es de $" . number_format($falta, 2)])
+                    ->withErrors(['estado_id' => 'No se puede finalizar o retirar la OT: El saldo pendiente es de $'.number_format($falta, 2)])
                     ->withInput();
             }
         }
@@ -606,10 +623,10 @@ class OrdenDeTrabajoController extends Controller
                 ->withInput();
         }
 
-        if (empty($data['vehiculo_id']) && !empty($data['nuevo_vehiculo'])) {
+        if (empty($data['vehiculo_id']) && ! empty($data['nuevo_vehiculo'])) {
             $erroresVehiculo = $this->validarVehiculoNuevo($data['nuevo_vehiculo']);
 
-            if (!empty($erroresVehiculo)) {
+            if (! empty($erroresVehiculo)) {
                 return back()->withErrors($erroresVehiculo)->withInput();
             }
         }
@@ -617,7 +634,7 @@ class OrdenDeTrabajoController extends Controller
         DB::transaction(function () use ($validated, $data, $orden) {
             $estadoAnterior = (int) $orden->estado_id;
 
-            if (empty($data['titular_id']) && !empty($data['nuevo_titular'])) {
+            if (empty($data['titular_id']) && ! empty($data['nuevo_titular'])) {
                 $nuevoTitular = Titular::create([
                     'nombre' => $data['nuevo_titular']['nombre'] ?? '',
                     'apellido' => $data['nuevo_titular']['apellido'] ?? '',
@@ -627,7 +644,7 @@ class OrdenDeTrabajoController extends Controller
                 $data['titular_id'] = $nuevoTitular->id;
             }
 
-            if (empty($data['vehiculo_id']) && !empty($data['nuevo_vehiculo'])) {
+            if (empty($data['vehiculo_id']) && ! empty($data['nuevo_vehiculo'])) {
                 $data['vehiculo_id'] = $this->crearVehiculoNuevo($data['nuevo_vehiculo'])->id;
             }
 
@@ -640,7 +657,7 @@ class OrdenDeTrabajoController extends Controller
             $prefixFinal = $conFacturaFinal ? 'FC-' : 'OT-';
             $numeroCorrelativo = $orden->numero_orden;
 
-            if (!$numeroCorrelativo || !str_starts_with($numeroCorrelativo, $prefixFinal)) {
+            if (! $numeroCorrelativo || ! str_starts_with($numeroCorrelativo, $prefixFinal)) {
                 $numeroCorrelativo = $this->generarNumeroOrden($prefixFinal);
             }
 
@@ -662,7 +679,7 @@ class OrdenDeTrabajoController extends Controller
                 OrdenDeTrabajoHistorialEstado::create([
                     'orden_de_trabajo_id' => $orden->id,
                     'estado_id' => $orden->estado_id,
-                    'user_id' => auth()->id()
+                    'user_id' => auth()->id(),
                 ]);
             }
 
@@ -680,12 +697,13 @@ class OrdenDeTrabajoController extends Controller
                     }
                 }
             }
-            if (!empty($atributoFieldErrors)) {
+            if (! empty($atributoFieldErrors)) {
                 $partes = [];
                 foreach ($faltantesPorArticulo as $artNombre => $campos) {
-                    $partes[] = 'Falta completar ' . implode(' y ', $campos) . ' del artículo ' . $artNombre;
+                    $partes[] = 'Falta completar '.implode(' y ', $campos).' del artículo '.$artNombre;
                 }
-                return back()->withErrors($atributoFieldErrors)->withInput()->with('error', implode('. ', $partes) . '.');
+
+                return back()->withErrors($atributoFieldErrors)->withInput()->with('error', implode('. ', $partes).'.');
             }
             // --- FIN VALIDACIÓN ---
 
@@ -717,7 +735,7 @@ class OrdenDeTrabajoController extends Controller
                     }
 
                     $sc = Subcategoria::with('categoria')->find($subcategoriaId);
-                    if (!$sc) {
+                    if (! $sc) {
                         continue;
                     }
 
@@ -810,12 +828,13 @@ class OrdenDeTrabajoController extends Controller
 
             if ($pagos->isEmpty()) {
                 Log::info("La OT #{$orden->id} no tiene pagos registrados.");
+
                 return;
             }
 
             foreach ($pagos as $pago) {
                 // Solo procesar pagos bloqueados que NO tengan movimiento registrado
-                if ($pago->bloqueado && !$pago->movimiento_registrado) {
+                if ($pago->bloqueado && ! $pago->movimiento_registrado) {
 
                     $monto = (float) $pago->valor;
 
@@ -851,9 +870,97 @@ class OrdenDeTrabajoController extends Controller
             }
 
         } catch (\Exception $e) {
-            Log::error("Error al procesar pagos de OT #{$orden->id}: " . $e->getMessage());
+            Log::error("Error al procesar pagos de OT #{$orden->id}: ".$e->getMessage());
             throw $e;
         }
+    }
+
+    public function pausar(Request $request, OrdenDeTrabajo $orden)
+    {
+        $validated = $request->validate([
+            'motivo' => ['nullable', 'string', 'max:500'],
+        ], [
+            'motivo.max' => 'El motivo no puede superar los :max caracteres.',
+        ]);
+
+        $motivo = trim((string) ($validated['motivo'] ?? ''));
+        $motivo = $motivo !== '' ? $motivo : null;
+
+        DB::transaction(function () use ($orden, $motivo) {
+            $ordenBloqueada = OrdenDeTrabajo::query()
+                ->with('estado')
+                ->lockForUpdate()
+                ->findOrFail($orden->id);
+
+            if ($ordenBloqueada->estado?->nombre === Estado::NOMBRE_PAUSADA) {
+                throw ValidationException::withMessages([
+                    'estado' => 'La orden ya está pausada.',
+                ]);
+            }
+
+            if (Estado::esFinal($ordenBloqueada->estado?->nombre)) {
+                throw ValidationException::withMessages([
+                    'estado' => 'No se puede pausar una orden que se encuentra en un estado final.',
+                ]);
+            }
+
+            $estadoPausadaId = Estado::idPausada();
+            if (! $estadoPausadaId) {
+                throw ValidationException::withMessages([
+                    'estado' => 'El estado Pausada no está configurado en el sistema.',
+                ]);
+            }
+
+            $ordenBloqueada->update([
+                'estado_previo_pausa_id' => $ordenBloqueada->estado_id,
+                'estado_id' => $estadoPausadaId,
+            ]);
+
+            OrdenDeTrabajoHistorialEstado::create([
+                'orden_de_trabajo_id' => $ordenBloqueada->id,
+                'estado_id' => $estadoPausadaId,
+                'user_id' => auth()->id(),
+                'motivo' => $motivo,
+            ]);
+        });
+
+        return back()->with('success', "Orden #{$orden->id} pausada correctamente.");
+    }
+
+    public function reanudar(OrdenDeTrabajo $orden)
+    {
+        DB::transaction(function () use ($orden) {
+            $ordenBloqueada = OrdenDeTrabajo::query()
+                ->with('estado')
+                ->lockForUpdate()
+                ->findOrFail($orden->id);
+
+            if ($ordenBloqueada->estado?->nombre !== Estado::NOMBRE_PAUSADA) {
+                throw ValidationException::withMessages([
+                    'estado' => 'La orden no está pausada.',
+                ]);
+            }
+
+            $estadoPrevio = Estado::find($ordenBloqueada->estado_previo_pausa_id);
+            if (! $estadoPrevio || $estadoPrevio->nombre === Estado::NOMBRE_PAUSADA) {
+                throw ValidationException::withMessages([
+                    'estado' => 'No se pudo determinar el estado anterior de la orden.',
+                ]);
+            }
+
+            $ordenBloqueada->update([
+                'estado_id' => $estadoPrevio->id,
+                'estado_previo_pausa_id' => null,
+            ]);
+
+            OrdenDeTrabajoHistorialEstado::create([
+                'orden_de_trabajo_id' => $ordenBloqueada->id,
+                'estado_id' => $estadoPrevio->id,
+                'user_id' => auth()->id(),
+            ]);
+        });
+
+        return back()->with('success', "Orden #{$orden->id} reanudada correctamente.");
     }
 
     public function show(OrdenDeTrabajo $orden)
@@ -900,6 +1007,7 @@ class OrdenDeTrabajoController extends Controller
         if (! $canViewFinancialAmounts) {
             $orden->setRelation('detalles', $orden->detalles->map(function ($detalle) {
                 $detalle->valor = null;
+
                 return $detalle;
             }));
 
@@ -907,6 +1015,7 @@ class OrdenDeTrabajoController extends Controller
                 $pago->valor = null;
                 $pago->monto_usd = null;
                 $pago->tipo_cambio = null;
+
                 return $pago;
             }));
 
@@ -929,6 +1038,12 @@ class OrdenDeTrabajoController extends Controller
     {
         if ($this->isTallerUser()) {
             return redirect()->route('taller.ordenes.show', $orden);
+        }
+
+        if ($orden->estado()->where('nombre', Estado::NOMBRE_PAUSADA)->exists()) {
+            return redirect()
+                ->route('ordenes.show', $orden)
+                ->with('error', 'La orden está pausada y sólo puede consultarse o reanudarse.');
         }
 
         $orden->load([
@@ -960,7 +1075,10 @@ class OrdenDeTrabajoController extends Controller
             ->orderBy('nombre')
             ->get();
 
-        $estados = Estado::select('id', 'nombre')->orderBy('nombre')->get();
+        $estados = Estado::select('id', 'nombre')
+            ->where('nombre', '!=', Estado::NOMBRE_PAUSADA)
+            ->orderBy('nombre')
+            ->get();
         $mediosDePago = MedioDePago::select('id', 'nombre', 'moneda')->orderBy('nombre')->get();
         $marcasArticulos = MarcaArticulo::select('id', 'nombre')->orderBy('nombre')->get();
 
@@ -975,13 +1093,18 @@ class OrdenDeTrabajoController extends Controller
             'marcasArticulos' => $marcasArticulos,
         ]);
     }
+
     public function destroy(Request $request, OrdenDeTrabajo $orden)
     {
         abort_if($this->isTallerUser(), 403);
 
+        if ($orden->estado()->where('nombre', Estado::NOMBRE_PAUSADA)->exists()) {
+            return back()->withErrors(['error' => 'La orden está pausada. Reanudala antes de anularla.']);
+        }
+
         $estadoAnulada = Estado::where('nombre', 'Anulada')->first();
 
-        if (!$estadoAnulada) {
+        if (! $estadoAnulada) {
             return back()->withErrors(['error' => 'No se encontró el estado "Anulada" en el sistema.']);
         }
 
@@ -1041,6 +1164,7 @@ class OrdenDeTrabajoController extends Controller
             ->route('ordenes.index')
             ->with('success', "Orden #{$orden->id} anulada correctamente ✅");
     }
+
     private function isTallerUser($user = null): bool
     {
         $user ??= auth()->user();
@@ -1053,22 +1177,22 @@ class OrdenDeTrabajoController extends Controller
      */
     private function generarNumeroOrden(string $prefix): string
     {
-        $lastOrder = OrdenDeTrabajo::whereRaw("numero_orden REGEXP '^" . $prefix . "[0-9]+$'")
+        $lastOrder = OrdenDeTrabajo::whereRaw("numero_orden REGEXP '^".$prefix."[0-9]+$'")
             ->lockForUpdate()
-            ->orderByRaw("CAST(SUBSTRING(numero_orden, " . (strlen($prefix) + 1) . ") AS UNSIGNED) DESC")
+            ->orderByRaw('CAST(SUBSTRING(numero_orden, '.(strlen($prefix) + 1).') AS UNSIGNED) DESC')
             ->first();
 
         $newNumber = 1;
-        if ($lastOrder && preg_match('/^' . preg_quote($prefix, '/') . '(\d+)$/', $lastOrder->numero_orden, $matches)) {
+        if ($lastOrder && preg_match('/^'.preg_quote($prefix, '/').'(\d+)$/', $lastOrder->numero_orden, $matches)) {
             $newNumber = (int) $matches[1] + 1;
         }
 
-        $numeroCorrelativo = $prefix . str_pad($newNumber, 6, '0', STR_PAD_LEFT);
+        $numeroCorrelativo = $prefix.str_pad($newNumber, 6, '0', STR_PAD_LEFT);
 
         // Garantía anti-colisión: Incrementar si ya existe en la BD
         while (OrdenDeTrabajo::where('numero_orden', $numeroCorrelativo)->exists()) {
             $newNumber++;
-            $numeroCorrelativo = $prefix . str_pad($newNumber, 6, '0', STR_PAD_LEFT);
+            $numeroCorrelativo = $prefix.str_pad($newNumber, 6, '0', STR_PAD_LEFT);
         }
 
         return $numeroCorrelativo;
@@ -1122,7 +1246,7 @@ class OrdenDeTrabajoController extends Controller
         }
 
         // El modelo siempre tiene que pertenecer a la marca elegida
-        if ($modeloId && $marcaId && !Modelo::where('id', $modeloId)->where('marca_id', $marcaId)->exists()) {
+        if ($modeloId && $marcaId && ! Modelo::where('id', $modeloId)->where('marca_id', $marcaId)->exists()) {
             $modeloId = null;
         }
 
@@ -1134,5 +1258,3 @@ class OrdenDeTrabajoController extends Controller
         ]);
     }
 }
-
-

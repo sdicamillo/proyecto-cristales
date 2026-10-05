@@ -15,6 +15,7 @@ class OrdenDeTrabajo extends Model
         'titular_vehiculo_id',
         'compania_seguro_id',
         'estado_id',
+        'estado_previo_pausa_id',
         'asignado_a_id',
         'completado_por_id',
         'fecha',
@@ -51,6 +52,11 @@ class OrdenDeTrabajo extends Model
         return $this->belongsTo(Estado::class, 'estado_id');
     }
 
+    public function estadoPrevioPausa()
+    {
+        return $this->belongsTo(Estado::class, 'estado_previo_pausa_id');
+    }
+
     public function detalles()
     {
         return $this->hasMany(DetalleOrdenDeTrabajo::class, 'orden_de_trabajo_id');
@@ -70,8 +76,6 @@ class OrdenDeTrabajo extends Model
     public function historialEstados()
     {
         return $this->hasMany(OrdenDeTrabajoHistorialEstado::class, 'orden_de_trabajo_id')
-                    ->orderBy('created_at', 'asc');
+            ->orderBy('created_at', 'asc');
     }
-
-
 }
