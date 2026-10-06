@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Titular;
-use App\Models\Vehiculo;
-use App\Models\TitularVehiculo;
 use App\Models\Marca;
 use App\Models\Modelo;
+use App\Models\Titular;
+use App\Models\TitularVehiculo;
+use App\Models\Vehiculo;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -154,8 +154,9 @@ class ClienteController extends Controller
 
         // Si el vehículo ya no tiene dueños, eliminarlo completamente
         $tieneDuenos = $vehiculo->titulares()->count() > 0;
-        if (!$tieneDuenos) {
+        if (! $tieneDuenos) {
             $vehiculo->delete();
+
             return redirect()->back()->with('success', 'Vehículo eliminado (no tenía otros dueños).');
         }
 
@@ -183,7 +184,13 @@ class ClienteController extends Controller
     public function createAndAttachVehicle(Request $request, Titular $cliente)
     {
         $validated = $request->validate([
-            'patente' => 'required|string|max:20|regex:/^(?:[A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/|unique:vehiculo,patente',
+            'patente' => [
+                'required',
+                'string',
+                'max:20',
+                'regex:/^(?:[A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$/',
+                'unique:vehiculo,patente',
+            ],
             'marca_id' => 'required|exists:marcas,id',
             'modelo_id' => 'required|exists:modelos,id',
             'anio' => 'nullable|integer|min:1900|max:2100',
@@ -210,6 +217,7 @@ class ClienteController extends Controller
     public function getModelosByMarca($marcaId)
     {
         $modelos = Modelo::where('marca_id', $marcaId)->orderBy('nombre')->get();
+
         return response()->json($modelos);
     }
 

@@ -1177,15 +1177,21 @@ class OrdenDeTrabajoController extends Controller
      */
     private function generarNumeroOrden(string $prefix): string
     {
-        $lastOrder = OrdenDeTrabajo::whereRaw("numero_orden REGEXP '^".$prefix."[0-9]+$'")
+        // Filtrar y ordenar la parte numérica en PHP mantiene el generador portable
+        // entre MySQL (producción) y SQLite (pruebas automatizadas).
+        $pattern = '/^'.preg_quote($prefix, '/').'(\d+)$/';
+        $lastNumber = OrdenDeTrabajo::where('numero_orden', 'like', $prefix.'%')
             ->lockForUpdate()
-            ->orderByRaw('CAST(SUBSTRING(numero_orden, '.(strlen($prefix) + 1).') AS UNSIGNED) DESC')
-            ->first();
+            ->pluck('numero_orden')
+            ->reduce(function (int $max, ?string $numeroOrden) use ($pattern): int {
+                if ($numeroOrden !== null && preg_match($pattern, $numeroOrden, $matches)) {
+                    return max($max, (int) $matches[1]);
+                }
 
-        $newNumber = 1;
-        if ($lastOrder && preg_match('/^'.preg_quote($prefix, '/').'(\d+)$/', $lastOrder->numero_orden, $matches)) {
-            $newNumber = (int) $matches[1] + 1;
-        }
+                return $max;
+            }, 0);
+
+        $newNumber = $lastNumber + 1;
 
         $numeroCorrelativo = $prefix.str_pad($newNumber, 6, '0', STR_PAD_LEFT);
 

@@ -10,3 +10,12 @@
 4. php artisan key:generate
 5. php artisan migrate:fresh --seed
 6. php artisan serve
+
+## Validación automatizada para agentes
+
+La batería reproducible y sus criterios de aceptación están documentados en
+[`docs/PRUEBAS_PARA_AGENTES.md`](docs/PRUEBAS_PARA_AGENTES.md).
+
+```bash
+composer test:agent
+```

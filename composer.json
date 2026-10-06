@@ -69,6 +69,11 @@
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
+        ],
+        "test:agent": [
+            "@php artisan config:clear --ansi",
+            "@php artisan test --compact tests/Agent tests/Feature/AnulacionOrdenMotivoTest.php tests/Feature/OrdenDeTrabajoVehiculoNuevoTest.php tests/Feature/ResponsablesOrdenTest.php tests/Feature/PagoEnDolaresTest.php tests/Feature/MovimientoDolaresTest.php tests/Feature/PausaOrdenDeTrabajoTest.php tests/Unit/ActualizarEstadosTest.php",
+            "npm run build"
         ]
     },
     "extra": {

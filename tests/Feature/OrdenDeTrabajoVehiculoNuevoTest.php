@@ -70,7 +70,7 @@ it('crea la orden dando de alta una marca y un modelo que no existían', functio
     $this->actingAs($this->usuario);
 
     $response = $this->post('/ordenes', payloadOrden([
-        'patente' => 'ab123cd',
+        'patente' => 'AB123CD',
         'marca_id' => null,
         'marca_nueva' => 'Chery',
         'modelo_id' => null,
