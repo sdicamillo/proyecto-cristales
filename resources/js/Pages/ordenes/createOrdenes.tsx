@@ -21,6 +21,8 @@ type CatalogItem = { id: number; nombre: string };
 
 type FormData = {
     tipo_documento: TipoDocumento;
+    con_factura: boolean;
+    numero_factura: string;
     numero_orden: string;
     compania_seguro_id: number | null;
     es_garantia: boolean;
@@ -69,6 +71,8 @@ export default function CreateOrdenes({ usuarios, titulares, estados, mediosDePa
 
     const initialValues: FormData = {
         tipo_documento: 'OT',
+        con_factura: false,
+        numero_factura: '',
         numero_orden: '',
         compania_seguro_id: null,
         es_garantia: false,
@@ -203,10 +207,13 @@ export default function CreateOrdenes({ usuarios, titulares, estados, mediosDePa
             return;
         }
 
+        const llevaFactura = data.con_factura || data.tipo_documento === 'FC';
         const dataToSend = {
             ...data,
             detalles: detallesValidos,
-            con_factura: data.tipo_documento === 'FC',
+            con_factura: llevaFactura,
+            numero_factura: llevaFactura ? (data.numero_factura?.trim() || null) : null,
+            tipo_documento: llevaFactura ? 'FC' : 'OT',
         };
 
         router.post('/ordenes', dataToSend as any, {
@@ -233,7 +240,7 @@ export default function CreateOrdenes({ usuarios, titulares, estados, mediosDePa
         });
     };
 
-    const tituloPantalla = data.tipo_documento === 'FC' ? 'Nueva Orden con Factura' : 'Nueva Orden de Trabajo';
+    const tituloPantalla = (data.con_factura || data.tipo_documento === 'FC') ? 'Nueva Orden con Factura' : 'Nueva Orden de Trabajo';
 
     return (
         <DashboardLayout>
@@ -256,34 +263,61 @@ export default function CreateOrdenes({ usuarios, titulares, estados, mediosDePa
 
                 <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-8 shadow-xl">
                     <form onSubmit={handleSubmit} className="space-y-8">
-                        {/* Tipo documento */}
+                        {/* Tipo documento y Facturación */}
                         <div className="rounded-xl border border-gray-200 bg-gray-50 p-6">
-                            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
                                 <div>
-                                    <label className="mb-2 block text-sm font-semibold text-gray-800">Tipo de documento *</label>
+                                    <label className="mb-2 block text-sm font-semibold text-gray-800">¿Lleva factura? *</label>
                                     <div className="flex gap-2">
                                         <button
                                             type="button"
-                                            onClick={() => setField("tipo_documento", "OT")}
-                                            className={`flex-1 rounded-xl border px-4 py-3 font-bold transition ${data.tipo_documento === 'OT'
-                                                ? 'border-green-600 bg-green-600 text-white'
+                                            onClick={() => {
+                                                setField("tipo_documento", "OT");
+                                                setField("con_factura", false);
+                                                setField("numero_factura", "");
+                                            }}
+                                            className={`flex-1 rounded-xl border px-3 py-3 font-bold transition text-sm ${!data.con_factura && data.tipo_documento === 'OT'
+                                                ? 'border-green-600 bg-green-600 text-white shadow-sm'
                                                 : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
                                                 }`}
                                         >
-                                            Sin Turno (OT)
+                                            No (OT)
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={() => setField('tipo_documento', 'FC')}
-                                            className={`flex-1 rounded-xl border px-4 py-3 font-bold transition ${data.tipo_documento === 'FC'
-                                                ? 'border-blue-600 bg-blue-600 text-white'
+                                            onClick={() => {
+                                                setField('tipo_documento', 'FC');
+                                                setField('con_factura', true);
+                                            }}
+                                            className={`flex-1 rounded-xl border px-3 py-3 font-bold transition text-sm ${data.con_factura || data.tipo_documento === 'FC'
+                                                ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
                                                 : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
                                                 }`}
                                         >
-                                            Con turno (FC)
+                                            Sí (Con Factura)
                                         </button>
                                     </div>
                                     {(errors as any).tipo_documento && <p className="mt-2 text-sm text-red-600">{(errors as any).tipo_documento}</p>}
+                                </div>
+
+                                <div>
+                                    <label className="mb-2 block text-sm font-semibold text-gray-800">
+                                        Número de factura
+                                        {(data.con_factura || data.tipo_documento === 'FC') && <span className="ml-1 text-blue-600 font-bold">*</span>}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        disabled={!(data.con_factura || data.tipo_documento === 'FC')}
+                                        value={data.numero_factura || ''}
+                                        onChange={(e) => setField('numero_factura', e.target.value)}
+                                        placeholder={(data.con_factura || data.tipo_documento === 'FC') ? "Ej: 0001-00001234" : "(Seleccioná 'Sí' para habilitar)"}
+                                        className={`w-full rounded-xl border-2 px-4 py-3 font-medium outline-none transition ${
+                                            (data.con_factura || data.tipo_documento === 'FC')
+                                                ? 'border-blue-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-400'
+                                                : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                                        }`}
+                                    />
+                                    {(errors as any).numero_factura && <p className="mt-2 text-sm text-red-600">{(errors as any).numero_factura}</p>}
                                 </div>
 
                                 <div>
@@ -302,9 +336,9 @@ export default function CreateOrdenes({ usuarios, titulares, estados, mediosDePa
                                         type="checkbox"
                                         checked={!!data.es_garantia}
                                         onChange={(e) => setField('es_garantia', e.target.checked)}
-                                        className="h-5 w-5"
+                                        className="h-5 w-5 accent-green-600 rounded"
                                     />
-                                    <label htmlFor="es_garantia" className="text-sm font-semibold text-gray-800">
+                                    <label htmlFor="es_garantia" className="text-sm font-semibold text-gray-800 cursor-pointer">
                                         Es garantía
                                     </label>
                                 </div>

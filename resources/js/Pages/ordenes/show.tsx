@@ -63,6 +63,9 @@ type Orden = {
     asignado_a?: { id: number; name: string } | null;
     completado_por?: { id: number; name: string } | null;
     id: number;
+    numero_orden?: string | null;
+    con_factura: boolean;
+    numero_factura?: string | null;
     fecha: string;
     observacion: string | null;
     estado: { nombre: string };
@@ -247,6 +250,15 @@ export default function Show({
                                     }`}
                                 >
                                     {orden.estado.nombre}
+                                </span>
+                                <span
+                                    className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                                        orden.con_factura
+                                            ? 'border-blue-200 bg-blue-100 text-blue-700'
+                                            : 'border-gray-200 bg-gray-100 text-gray-600'
+                                    }`}
+                                >
+                                    {orden.con_factura ? `Factura ${orden.numero_factura ? `#${orden.numero_factura}` : ''}` : 'Sin Factura'}
                                 </span>
                                 {!esTaller && <span className="text-sm text-gray-500">Compañía: {companiaNombre}</span>}
                             </div>
@@ -537,6 +549,29 @@ export default function Show({
                                 <div>
                                     <p className="text-sm text-gray-500">Año</p>
                                     <p className="font-medium text-gray-900">{orden.titular_vehiculo.vehiculo.anio}</p>
+                                </div>
+                            )}
+                        </SideCard>
+
+                        <SideCard title="Facturación" icon={<FileText className="h-5 w-5 text-gray-500" />}>
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm text-gray-500">¿Lleva Factura?</span>
+                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                    orden.con_factura ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                    {orden.con_factura ? 'Sí' : 'No'}
+                                </span>
+                            </div>
+                            {orden.con_factura && (
+                                <InfoRow
+                                    icon={<FileText className="h-5 w-5 text-gray-400" />}
+                                    label="Número de Factura"
+                                    value={orden.numero_factura || 'Sin número asignado'}
+                                />
+                            )}
+                            {orden.numero_orden && (
+                                <div className="text-xs text-gray-400 pt-1">
+                                    Correlativo interno: {orden.numero_orden}
                                 </div>
                             )}
                         </SideCard>

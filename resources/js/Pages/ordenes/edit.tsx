@@ -53,6 +53,7 @@ type Orden = {
   fecha_entrega_estimada?: string | null;
   observacion: string | null;
   con_factura: boolean;
+  numero_factura?: string | null;
   numero_orden?: string | null;
   es_garantia?: boolean;
   compania_seguro_id?: number | null;
@@ -70,6 +71,7 @@ type FormData = {
   fecha_entrega_estimada: string;
   observacion: string;
   con_factura: number;
+  numero_factura: string;
   numero_orden: string;
   es_garantia: boolean;
   compania_seguro_id: number | null;
@@ -126,6 +128,7 @@ export default function Edit({
       : "",
     observacion: orden.observacion ?? "",
     con_factura: orden.con_factura ? 1 : 0,
+    numero_factura: (orden as any).numero_factura ?? "",
 
     numero_orden: orden.numero_orden ?? "",
     es_garantia: !!orden.es_garantia,
@@ -302,7 +305,7 @@ export default function Edit({
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Cabecera */}
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
                 <label className="mb-2 block text-sm font-semibold text-gray-800">Estado *</label>
                 <select
@@ -321,16 +324,42 @@ export default function Edit({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-800">Factura *</label>
+                <label className="mb-2 block text-sm font-semibold text-gray-800">¿Lleva Factura? *</label>
                 <select
                   value={data.con_factura}
-                  onChange={(e) => mergeForm({ con_factura: Number(e.target.value) })}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    mergeForm({
+                      con_factura: val,
+                      ...(val === 0 ? { numero_factura: "" } : {}),
+                    });
+                  }}
                   className="w-full rounded-xl border-2 bg-gray-50 px-4 py-3 font-medium text-gray-900 transition outline-none border-gray-200 hover:border-gray-300"
                 >
-                  <option value={1}>Con turno</option>
-                  <option value={0}>Sin turno</option>
+                  <option value={1}>Con factura</option>
+                  <option value={0}>Sin factura</option>
                 </select>
                 {errors.con_factura && <p className="mt-2 text-sm text-red-600">{errors.con_factura}</p>}
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-gray-800">
+                  Número de factura
+                  {Number(data.con_factura) === 1 && <span className="ml-1 text-blue-600 font-bold">*</span>}
+                </label>
+                <input
+                  type="text"
+                  disabled={Number(data.con_factura) !== 1}
+                  value={data.numero_factura || ""}
+                  onChange={(e) => mergeForm({ numero_factura: e.target.value })}
+                  placeholder={Number(data.con_factura) === 1 ? "Ej: 0001-00001234" : "(Sin factura)"}
+                  className={`w-full rounded-xl border-2 px-4 py-3 font-medium outline-none transition ${
+                    Number(data.con_factura) === 1
+                      ? "border-blue-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-400"
+                      : "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
+                  }`}
+                />
+                {errors.numero_factura && <p className="mt-2 text-sm text-red-600">{errors.numero_factura}</p>}
               </div>
 
               <div className="flex items-center gap-3 pt-7">
@@ -339,9 +368,9 @@ export default function Edit({
                   type="checkbox"
                   checked={!!data.es_garantia}
                   onChange={(e) => mergeForm({ es_garantia: e.target.checked })}
-                  className="h-5 w-5"
+                  className="h-5 w-5 accent-green-600 rounded"
                 />
-                <label htmlFor="es_garantia" className="text-sm font-semibold text-gray-800">
+                <label htmlFor="es_garantia" className="text-sm font-semibold text-gray-800 cursor-pointer">
                   Es garantía
                 </label>
               </div>

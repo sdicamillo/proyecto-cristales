@@ -122,9 +122,12 @@ Route::middleware(['auth'])->group(function () {
     });
 
     Route::get('api/marcas', [CatalogoVehiculoController::class, 'getMarcas'])->name('api.marcas');
+    Route::post('api/marcas', [CatalogoVehiculoController::class, 'storeMarca'])->name('api.marcas.store');
     Route::get('api/marcas-articulos', [MarcaArticuloController::class, 'index'])->name('api.marcas-articulos.index');
     Route::post('api/marcas-articulos', [MarcaArticuloController::class, 'store'])->name('api.marcas-articulos.store');
     Route::get('api/modelos/{marcaId}', [CatalogoVehiculoController::class, 'getModelosByMarca'])->name('api.modelos');
+    Route::post('api/modelos', [CatalogoVehiculoController::class, 'storeModelo'])->name('api.modelos.store');
+    Route::get('api/vehiculos', [CatalogoVehiculoController::class, 'getVehiculos'])->name('api.vehiculos');
 
     Route::middleware('capability:' . RoleCapabilities::VIEW_FINANCIAL_REPORTS)->group(function () {
         Route::get('/resumen-del-dia', [DailySummaryController::class, 'show'])->name('daily-summary.show');

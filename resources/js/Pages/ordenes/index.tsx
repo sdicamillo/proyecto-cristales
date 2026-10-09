@@ -44,6 +44,9 @@ type MedioDePago = {
 
 type Orden = {
     id: number;
+    numero_orden?: string | null;
+    con_factura?: boolean;
+    numero_factura?: string | null;
     fecha: string;
     observacion: string | null;
     titular_vehiculo: TitularVehiculo | null;
@@ -313,8 +316,8 @@ export default function Index({ ordenes }: { ordenes: any }) {
                                 className="w-full rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm text-gray-700 focus:border-gray-500 focus:ring-gray-200"
                             >
                                 <option value="">Todas</option>
-                                <option value="1">Con turno</option>
-                                <option value="0">Sin turno</option>
+                                <option value="1">Con factura</option>
+                                <option value="0">Sin factura</option>
                             </select>
                         </div>
 
@@ -436,7 +439,7 @@ export default function Index({ ordenes }: { ordenes: any }) {
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Fecha
+                        Orden / Fecha
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Titular
@@ -466,7 +469,20 @@ export default function Index({ ordenes }: { ordenes: any }) {
                         }`}
                       >
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatDateTimeToArgentina(orden.fecha)}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-gray-900">{orden.numero_orden || `#${orden.id}`}</span>
+                            {orden.con_factura && (
+                              <span
+                                className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700"
+                                title={orden.numero_factura ? `Factura N° ${orden.numero_factura}` : "Con Factura"}
+                              >
+                                FC{orden.numero_factura ? ` #${orden.numero_factura}` : ''}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {formatDateTimeToArgentina(orden.fecha)}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {orden.titular_vehiculo?.titular

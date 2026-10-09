@@ -29,6 +29,9 @@ interface Orden {
     id: number;
     fecha: string;
     observacion: string | null;
+    con_factura?: boolean;
+    numero_factura?: string | null;
+    numero_orden?: string | null;
     estado: { nombre: string };
     compania_seguro?: { nombre: string } | null;
     titular_vehiculo: {
@@ -95,8 +98,13 @@ export default function PrintableODT({ orden }: Props) {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                     <div style={{ background: '#1f2937', color: 'white', padding: '6px 16px', display: 'inline-block' }}>
-                        <span style={{ fontSize: '18pt', fontWeight: 900 }}>#{orden.id}</span>
+                        <span style={{ fontSize: '18pt', fontWeight: 900 }}>{orden.numero_orden || `#${orden.id}`}</span>
                     </div>
+                    {orden.con_factura && (
+                        <p style={{ fontSize: '9pt', fontWeight: 700, color: '#1f2937', margin: '4px 0 0 0' }}>
+                            Factura: {orden.numero_factura || 'S/N'}
+                        </p>
+                    )}
                     <p style={{ fontSize: '9pt', color: '#6b7280', margin: '4px 0 0 0' }}>Fecha: {fechaFormateada}</p>
                 </div>
             </div>

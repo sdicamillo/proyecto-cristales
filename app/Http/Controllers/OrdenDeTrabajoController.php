@@ -52,10 +52,12 @@ class OrdenDeTrabajoController extends Controller
                 $q = $request->q;
 
                 $query->where(function ($sub) use ($q) {
-                    $sub->whereHas('titularVehiculo.titular', function ($q2) use ($q) {
-                        $q2->where('nombre', 'like', "%{$q}%")
-                            ->orWhere('apellido', 'like', "%{$q}%");
-                    })
+                    $sub->where('orden_de_trabajo.numero_orden', 'like', "%{$q}%")
+                        ->orWhere('orden_de_trabajo.numero_factura', 'like', "%{$q}%")
+                        ->orWhereHas('titularVehiculo.titular', function ($q2) use ($q) {
+                            $q2->where('nombre', 'like', "%{$q}%")
+                                ->orWhere('apellido', 'like', "%{$q}%");
+                        })
                         ->orWhereHas('titularVehiculo.vehiculo', function ($q2) use ($q) {
                             $q2->where('patente', 'like', "%{$q}%");
                         });
@@ -179,6 +181,7 @@ class OrdenDeTrabajoController extends Controller
             'fecha_entrega_estimada' => 'required|date|after_or_equal:fecha',
             'observacion' => 'nullable|string|max:500',
             'con_factura' => 'nullable|boolean',
+            'numero_factura' => 'nullable|string|max:50',
             'tipo_documento' => 'nullable|in:FC,OT',
             'compania_seguro_id' => [
                 'nullable',
@@ -354,6 +357,7 @@ class OrdenDeTrabajoController extends Controller
                 'fecha_entrega_estimada' => $validated['fecha_entrega_estimada'],
                 'numero_orden' => $numeroCorrelativo,
                 'con_factura' => $conFactura,
+                'numero_factura' => $conFactura ? ($validated['numero_factura'] ?? null) : null,
                 'es_garantia' => (bool) ($validated['es_garantia'] ?? false),
                 'observacion' => $validated['observacion'] ?? null,
                 'compania_seguro_id' => $validated['compania_seguro_id'] ?? null,
@@ -546,6 +550,7 @@ class OrdenDeTrabajoController extends Controller
             'fecha' => 'required|date',
             'observacion' => 'nullable|string|max:500',
             'con_factura' => 'required|boolean',
+            'numero_factura' => 'nullable|string|max:50',
             'fecha_entrega_estimada' => 'nullable|date',
             'numero_orden' => 'nullable|string|max:50',
             'es_garantia' => 'nullable|boolean',
@@ -669,6 +674,7 @@ class OrdenDeTrabajoController extends Controller
                 'fecha' => $validated['fecha'],
                 'observacion' => $validated['observacion'] ?? null,
                 'con_factura' => $conFacturaFinal,
+                'numero_factura' => $conFacturaFinal ? ($validated['numero_factura'] ?? null) : null,
                 'fecha_entrega_estimada' => $validated['fecha_entrega_estimada'] ?? null,
                 'numero_orden' => $numeroCorrelativo,
                 'es_garantia' => (bool) ($validated['es_garantia'] ?? false),

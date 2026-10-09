@@ -20,6 +20,7 @@ class OrdenDeTrabajo extends Model
         'completado_por_id',
         'fecha',
         'con_factura',
+        'numero_factura',
         'observacion',
         'fecha_entrega_estimada',
         'numero_orden',

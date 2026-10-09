@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Marca;
 use App\Models\Modelo;
+use App\Models\Vehiculo;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -148,10 +149,61 @@ class CatalogoVehiculoController extends Controller
         return response()->json(Marca::orderBy('nombre')->get());
     }
 
+    public function storeMarca(Request $request)
+    {
+        $validated = $request->validate([
+            'nombre' => 'required|string|max:50',
+        ], [
+            'nombre.required' => 'El nombre de la marca es obligatorio.',
+            'nombre.max' => 'El nombre de la marca no puede superar los 50 caracteres.',
+        ]);
+
+        $nombre = trim($validated['nombre']);
+
+        $marca = Marca::firstOrCreate([
+            'nombre' => $nombre,
+        ]);
+
+        return response()->json($marca, 201);
+    }
+
     public function getModelosByMarca($marcaId)
     {
         return response()->json(
             Modelo::where('marca_id', $marcaId)->orderBy('nombre')->get()
         );
+    }
+
+    public function storeModelo(Request $request)
+    {
+        $validated = $request->validate([
+            'marca_id' => 'required|exists:marcas,id',
+            'nombre' => 'required|string|max:50',
+        ], [
+            'marca_id.required' => 'La marca es obligatoria.',
+            'marca_id.exists' => 'La marca seleccionada no existe.',
+            'nombre.required' => 'El nombre del modelo es obligatorio.',
+            'nombre.max' => 'El nombre del modelo no puede superar los 50 caracteres.',
+        ]);
+
+        $nombre = trim($validated['nombre']);
+
+        $modelo = Modelo::firstOrCreate([
+            'marca_id' => $validated['marca_id'],
+            'nombre' => $nombre,
+        ]);
+
+        $modelo->load('marca');
+
+        return response()->json($modelo, 201);
+    }
+
+    public function getVehiculos()
+    {
+        $vehiculos = Vehiculo::with(['marca:id,nombre', 'modelo:id,nombre'])
+            ->orderBy('patente')
+            ->get();
+
+        return response()->json($vehiculos);
     }
 }
